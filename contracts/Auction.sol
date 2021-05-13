@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.4.22 <0.9.0;
 
-//
-// 
-// 
 contract Auction {
     
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
-    uint    constant MAX_TICKET_PER_DEPOSIT = 100;
+    uint    constant MAX_TICKET_PER_DEPOSIT = 10;
     
+    // player data
     struct Player {
+        // number of deposit; 
         uint depositAmount;
-        uint reward;
+        // number of ticket won
+        uint ticketWon;
     }
-
+    
+    // match meta data
     struct Match {
         address creatorAdress;
         uint totalReward;
@@ -22,16 +23,17 @@ contract Auction {
         uint ticketReward;
         uint expiryDate;
         uint futureBlock;
-        uint winingCount;
-        uint maxWining;
+        uint winningCount;
+        uint maxwinning;
     }
     
     // state data
     // match id -> Match
     mapping(string => Match) matches;
+    // tickets
     mapping(string => address[]) tickets;
+    // player information for a match
     mapping(string => mapping(address => Player)) players;
-    
     
     // modifiers
     modifier creatorOnly(address creatorAddress, string memory matchId) {
@@ -47,14 +49,29 @@ contract Auction {
     }
 
     // events
-    // event Deposit(address player, uint value);
+    event DepositEvent(string matchId, address player, uint depositAmount, uint ticketCount);
+    event PublishedEvent(string matchId, address winner, uint winningOrder);
+    
+    // util functions
+    function min(uint x, uint y) private pure returns(uint){
+        return (x > y ? y : x);
+    }
+    
+    // util function 
+    function randrange(uint lower_bound, uint upper_bound, uint blockNumber, address previousWinner) private view returns(uint) {
+        require(lower_bound < upper_bound, "left must be less than right");
+        require(blockNumber > 0, "blockNumber must be greater than 0");
+        // random number = futureBlock + previousWinner
+        return uint(keccak256(abi.encodePacked(blockhash(blockNumber-1), previousWinner))) % (upper_bound - lower_bound) + lower_bound;
+    }
+    
     constructor(){
         // init
     }
     
     // functions
-    // TODO: Notice case where maxWiningTicket > number of ticket bought
-    function auction(string memory matchId, uint expiryDate, uint futureBlock, uint maxWining, uint ticketPrice, uint rewardPerTicket) public payable {
+    // TODO: Notice case where maxwinningTicket > number of ticket bought
+    function auction(string memory matchId, uint expiryDate, uint futureBlock, uint maxwinning, uint ticketPrice, uint rewardPerTicket) public payable {
         // use SafeMath (not safeMoon T,T)
         address creatorAdress = msg.sender;
         uint totalReward = msg.value;
@@ -63,19 +80,19 @@ contract Auction {
         // check expiryDate ( >= now)
         // check future block is valid
         // check rewardPerTicket
-        // check amount == rewardPerTicket * maxWiningTicket
+        // check amount == rewardPerTicket * maxwinningTicket
         require(matches[matchId].creatorAdress == ADDRESS_NULL, "Matches with given matchId is occupied");
         require(expiryDate > block.timestamp, "expiryDate must be in the future");
         require(futureBlock > block.number,   "futureBlock must be greater than current block");
         require(rewardPerTicket > 0, "rewardPerTicket must be greater than 0");
-        require(maxWining > 0, "maxWiningTicket must be greater than 0");
+        require(maxwinning > 0, "maxwinningTicket must be greater than 0");
         require(ticketPrice > 0, "ticketPrice must be greater than 0");
         
         // TODO: use safemath
-        require(maxWining * rewardPerTicket == totalReward, "sent amount must be equals to maxWiningTicket * rewardPerTicket");
+        require(maxwinning * rewardPerTicket == totalReward, "sent amount must be equals to maxwinningTicket * rewardPerTicket");
         
         // store match
-        matches[matchId] = Match(creatorAdress, totalReward, ticketPrice, rewardPerTicket, expiryDate, 0, maxWining, futureBlock);
+        matches[matchId] = Match(creatorAdress, totalReward, ticketPrice, rewardPerTicket, expiryDate, 0, maxwinning, futureBlock);
         // emit creating auction event
     }
 
@@ -88,75 +105,122 @@ contract Auction {
         uint    depositAmount  = msg.value;
         uint    ticketPrice   =  matches[matchId].ticketPrice;
         address playerAddress = msg.sender;
+        
+        // conditions
         require(depositAmount > 0, "depositValue must be greater than 0");
         require(depositAmount % ticketPrice == 0, "depositValue should be divisble by ticketPrice");
         uint ticketCount = depositAmount / ticketPrice;
         require(ticketCount <= MAX_TICKET_PER_DEPOSIT, "Number of ticket exceeds");
         
+        // push
         for(uint i = 0; i < ticketCount; ++i) {
             tickets[matchId].push(playerAddress);
         }
-        
         players[matchId][playerAddress].depositAmount += depositAmount;
         // emit events
-        
-    }
-    
-    // util funciton 
-    function randrange(uint left, uint right, uint blockNumber, address previousWinner) private view returns(uint) {
-        require(left <= right, "left must be less than or equal right");
-        require(blockNumber > 0, "blockNumber must be greater than 0");
-        if (left == right) {
-            return left;
-        }
-        
-        // random number = futureBlock + previousWinner
-        return uint(keccak256(abi.encodePacked(blockhash(blockNumber-1), previousWinner))) % (right - left + 1) + left;
+        emit DepositEvent(matchId, playerAddress, depositAmount, ticketCount);
     }
 
-    // call this function to check if the block hash for the randomness seed has been generated
+    // call this function to publish lottery result
+    // if not enough winining ticket published, no one can withdraw money
     function publish_lottery_result(string memory matchId) public validMatch(matchId) {
     	// check auctionCreator, auctionId validity
     	// check if desired block generated
-        Match storage amatch =  matches[matchId];
+    	
+    	// read match information
+        Match memory amatch =  matches[matchId];
     	uint futureBlock = amatch.futureBlock;
-    	uint winingCount = amatch.winingCount;
+    	uint winningCount = amatch.winningCount;
     	address[] storage matchTickets = tickets[matchId];
     	
+    	// check: valid block 
+    	// check winningCount exceeds min(maxwinning or max ticket count)
+    	
     	require(block.number >= futureBlock, "futureBlock is not generated");
-    	require(winingCount < amatch.maxWining, "maxWining reached");
-    	require(winingCount < matchTickets.length-1, "winingCount reached number of tickets");
+    	require(winningCount < amatch.maxwinning, "maxwinning reached");
+    	require(winningCount < matchTickets.length, "winningCount reached number of tickets");
     	
         // 	address[] storage matchTickets = tickets[matchId];
         address previousWinner = ADDRESS_NULL;
-    	if (winingCount > 0) {
-    	    previousWinner = matchTickets[winingCount - 1];
+    	if (winningCount > 0) {
+    	    previousWinner = matchTickets[winningCount - 1];
     	}
     	
-    	uint nextWinner = randrange(winingCount, tickets[matchId].length-1, futureBlock, previousWinner);
-    	(matchTickets[winingCount], matchTickets[nextWinner]) = (matchTickets[nextWinner], matchTickets[winingCount]);
+    	uint nextWinner = randrange(winningCount, tickets[matchId].length, futureBlock, previousWinner);
+    	(matchTickets[winningCount], matchTickets[nextWinner]) = (matchTickets[nextWinner], matchTickets[winningCount]);
     	address winnerAddress = matchTickets[nextWinner];
-    	// increase reward
-    	players[matchId][winnerAddress].reward += amatch.ticketReward;
+    	// increase ticketWon
+    	players[matchId][winnerAddress].ticketWon ++;
+    	// increase number of win
+    	matches[matchId].winningCount ++;
     	// emit events
+    	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
     }
     
-    // withdraw the price
-    function withdraw(string memory matchId) public validMatch(matchId) {
-    	// check for valid host, matchId
-        
-    }
     
-    // function min(uint x, uint y) private returns(uint){
-    //     return (x > y ? y : x);
-    // }
 
-    // function creatorWithdraw(string memory matchId) public creatorOnly(msg.sender, matchId) {
-    //     Match storage amatch = matches[matchId];
-    //     require(amatch.expiryDate >= block.timestamp, "Match is not over");
-    //     require(amatch.winingCount >= min(tickets[matchId].length, amatch.maxWining), "Match is not over");
+    // withdraw the price
+    function withdraw(string memory matchId) public validMatch(matchId) returns(bool) {
         
-    //     // withdraw 
-    //     // remember to set count == 0 first
+        Player storage player = players[matchId][msg.sender];
+        Match memory amatch = matches[matchId];
+        
+        // prevent withdrawal when maxwinning not reached
+        require(amatch.winningCount == min(amatch.maxwinning, tickets[matchId].length), "Match is not over, call to publish_lottery_result to publish tickets");
+        
+        // depositAmount
+        require(player.depositAmount > 0, "player hasnot deposit for this match");
+    	
+    	// TODO: Use safemath
+    	uint depositAmount = player.depositAmount;
+    	uint ticketWon = player.ticketWon;
+    	// send win token first
+    	// in case sending token fails, we just restore 
+    	
+    	// TODO: Add ERC20 token here
+    	if (ticketWon > 0) {
+    	    
+    	    player.ticketWon = 0;
+    	    uint reward = ticketWon * matches[matchId].ticketReward;
+        	if (!payable(msg.sender).send(reward)) {
+        	    // just recover 
+        	    player.ticketWon = ticketWon;
+        	    // return if failed
+        	    return false; 
+        	}
+        	
+        	// decrease totalReward 
+        	matches[matchId].totalReward -= reward;
+        	
+        	// compute refund 
+        	player.depositAmount -= matches[matchId].ticketPrice * ticketWon;
+        	depositAmount = player.depositAmount;
+    	}
+    	
+    	player.depositAmount = 0;
+    	if (!payable(msg.sender).send(depositAmount)) {
+    	    // just restore 
+    	    player.depositAmount = depositAmount;
+    	    // fail with full withdrawal
+    	    return false;
+    	}
+    	return true;
+    }
+    
+    // function creatorWithdraw(string memory matchId) public creatorOnly(msg.sender, matchId) returns(bool){
+    //     Match memory amatch = matches[matchId];
+    //     // prevent withdrawal when maxwinning not reached
+    //     require(amatch.winningCount > tickets[matchId].length, "Match is not over, call to publish_lottery_result to publish tickets");
+        
+    //     uint totalReward = amatch.totalReward;
+    //     require(amatch.totalReward > 0, "Total reward must be larger than 0");
+        
+    //     // TODO: Use ERC20
+    //     matches[matchId].totalReward = 0;
+    //     if (!payable(msg.sender).send(totalReward)) {
+    //         matches[matchId].totalReward = totalReward;
+    //         return false;
+    //     }
+    //     return true;
     // }
 }
