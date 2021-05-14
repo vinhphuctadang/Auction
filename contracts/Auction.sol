@@ -6,6 +6,8 @@ contract Auction {
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
     uint    constant MAX_TICKET_PER_DEPOSIT = 5;
     
+    uint dummyVariable;
+
     // player data
     struct Player {
         // number of deposit;
@@ -64,24 +66,15 @@ contract Auction {
     }
     
     // util function 
-    function randrange(uint lower_bound, uint upper_bound, uint blockNumber, address previousWinner) public view returns(uint) {
+    function randrange(uint lower_bound, uint upper_bound, uint blockNumber, address previousWinner) private view returns(uint) {
         require(lower_bound < upper_bound, "lower_bound must be less than upper_bound");
         require(blockNumber > 0, "blockNumber must be greater than 0");
         // random number = futureBlock + previousWinner
         return uint(keccak256(abi.encodePacked(blockhash(blockNumber-1), previousWinner))) % (upper_bound - lower_bound) + lower_bound;
     }
     
-    constructor(){
-        // init
-        // create mocks:
-        matches["m1"] = Match(0x0000000000000000000000000000000000000001, 10, 10, 10, 1700000000, 1, 0, 20);
-        tickets["m1"].push(0x0000000000000000000000000000000000000002);
-        tickets["m1"].push(0x0000000000000000000000000000000000000003);
-        tickets["m1"].push(0x0000000000000000000000000000000000000003);
-        tickets["m1"].push(0x0000000000000000000000000000000000000004);
-        players["m1"][0x0000000000000000000000000000000000000002] = Player(10, 0);
-        players["m1"][0x0000000000000000000000000000000000000003] = Player(20, 0);
-        players["m1"][0x0000000000000000000000000000000000000004] = Player(10, 0);
+    constructor() public{
+        
     }
     
     // functions
@@ -151,7 +144,7 @@ contract Auction {
     	
     	// check: valid block 
     	// check winningCount exceeds min(maxWinning or max ticket count)
-        // 	require(block.number >= futureBlock, "futureBlock is not generated");
+        require(block.number >= futureBlock, "futureBlock is not generated");
     	require(winningCount < amatch.maxWinning, "maxWinning reached");
     	
         address previousWinner = ADDRESS_NULL;
@@ -201,7 +194,7 @@ contract Auction {
     	    
     	    player.ticketWon = 0;
     	    uint128 reward = ticketWon * matches[matchId].ticketReward;
-        	if (!payable(msg.sender).send(reward)) {
+        	if (!msg.sender.send(reward)) {
         	    // just recover 
         	    player.ticketWon = ticketWon;
         	    // return if failed
@@ -217,13 +210,17 @@ contract Auction {
     	}
     	
     	player.depositAmount = 0;
-    	if (!payable(msg.sender).send(depositAmount)) {
+    	if (!msg.sender.send(depositAmount)) {
     	    // just restore 
     	    player.depositAmount = depositAmount;
     	    // fail with full withdrawal
     	    return false;
     	}
     	return true;
+    }
+
+    function dummySet(uint a) public {
+        dummyVariable = a;
     }
 }
 
