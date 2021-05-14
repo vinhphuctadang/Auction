@@ -4,6 +4,11 @@ pragma solidity >=0.4.22 <0.9.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 
+/*
+1. Where usdc of winning ticket goes 
+2. (Design): Can we optimize more 
+3. Create tests
+*/
 contract Auction {
 
     // constants
