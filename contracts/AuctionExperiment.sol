@@ -15,7 +15,7 @@ contract Auction {
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
     
     // usdc address (erc20)
-    address constant USDC_ADDRESS = 0x358AA13c52544ECCEF6B0ADD0f801012ADAD5eE3;
+    address USDC_ADDRESS;
     
     // uint dummyVariable;
     // player data
@@ -86,7 +86,10 @@ contract Auction {
         return uint(keccak256(abi.encodePacked(blockhash(blockNumber - 1), block.timestamp))) % upper_bound;
     }
     
-    constructor() { }
+    constructor(address usdcContractAddress) { 
+        // wrong address will results in deposit failure 
+        USDC_ADDRESS = usdcContractAddress; 
+    }
     
     // functions
     function auction(
