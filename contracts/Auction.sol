@@ -3,6 +3,18 @@ pragma solidity >=0.4.22 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+/**
+ * @title SafeMath
+ * @dev Math operations with safety checks that throw on error
+ * customized openzeppelin-solidity safemath 
+ */
+library SafeMath {
+  function add(uint128 a, uint128 b) internal pure returns (uint128 c) {
+    c = a + b;
+    assert(c >= a);
+    return c;
+  }
+}
 
 /*
 1. Where usdc of winning ticket goes 
@@ -10,6 +22,9 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 3. Create tests
 */
 contract Auction {
+    
+    // use library
+    using SafeMath for uint128;
 
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
@@ -42,9 +57,9 @@ contract Auction {
     // state data
     // match id -> Match
     mapping(string => Match) matches;
-    // match player id
+    // player data for each match, use mapping for quick access 
     mapping(string => mapping(address => Player)) playerData;
-    // player information for a match
+    // player list for each match
     mapping(string => address[]) playerList;
 
     modifier validMatch(string memory matchId) {
@@ -145,7 +160,8 @@ contract Auction {
         require(success, "deposit failed");
         
         uint128 ticketCount = _amount / ticketPrice;
-        if (playerData[matchId][playerAddress].ticketCount == 0) {
+        uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
+        if (currentCount == 0) {
             // create new slot for new player 
             playerData[matchId][playerAddress].ticketCount = ticketCount;
             playerList[matchId].push(playerAddress);
@@ -155,7 +171,7 @@ contract Auction {
         }
         else {
             // just increase ticket count 
-            playerData[matchId][playerAddress].ticketCount += ticketCount;
+            playerData[matchId][playerAddress].ticketCount = currentCount.add(ticketCount);
         }
         
         // emit deposit event
@@ -220,7 +236,7 @@ contract Auction {
         Player memory player = playerData[matchId][playerAddress];
         
         // remaining ticket
-        uint128 remainTicket = (player.ticketCount - player.winningCount);
+        uint128 remainTicket = player.ticketCount - player.winningCount;
         
         // update number of remaning
         playerData[matchId][playerAddress].ticketCount = player.winningCount;
