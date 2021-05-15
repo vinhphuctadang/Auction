@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.4.22 <0.9.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -44,8 +44,8 @@ contract Auction {
     // match meta data
     struct Match { // 4 uint256
         address creatorAddress; // 20 bytes
-        address tokenContractAddress; // 20 bytes
         uint96  ticketReward;
+        address tokenContractAddress; // 20 bytes
         uint96  ticketPrice;
         uint64  expiryDate;
         uint128 futureBlock;
@@ -62,8 +62,12 @@ contract Auction {
     // player list for each match
     mapping(string => address[]) playerList;
 
+    // address
+
+    address admin;
+
     modifier validMatch(string memory matchId) {
-        require(matches[matchId].creatorAddress != ADDRESS_NULL, "Invalid match");
+        require(matches[matchId].creatorAddress != ADDRESS_NULL, "invalid match");
         _;
     }
     
@@ -104,6 +108,9 @@ contract Auction {
     constructor(address usdcContractAddress) { 
         // wrong address will results in deposit failure 
         USDC_ADDRESS = usdcContractAddress; 
+
+        // admin of contract
+        admin = msg.sender;
     }
     
     // functions
@@ -128,12 +135,14 @@ contract Auction {
         uint128 totalReward = maxWinning * ticketReward;
         // transfer token to this contract 
         bool success = ERC20(tokenContractAddress).transferFrom(payable(msg.sender), address(this), totalReward);
-        require(success, "Insufficient amount for reward");
+        require(success, "insufficient amount for reward");
         
         // store match
         matches[matchId] = Match(
-            creatorAddress, tokenContractAddress, 
-            ticketReward, ticketPrice, 
+            creatorAddress, 
+            ticketReward, 
+            tokenContractAddress, 
+            ticketPrice, 
             expiryDate, futureBlock, 
             0, maxWinning, 0
         ); // estimate gas: 4*23000 -> 5*23000
@@ -145,7 +154,7 @@ contract Auction {
     function deposit(string memory matchId, uint amount) public payable validMatch(matchId) {
         
         // check opening state
-        require(matches[matchId].expiryDate > block.timestamp, "Match is not open to deposit");
+        require(matches[matchId].expiryDate > block.timestamp, "match is not opened to deposit");
         
         // to prevent overflow, should limit upper_bound for amount
         uint128 _amount = uint128(amount);
@@ -154,7 +163,7 @@ contract Auction {
         address playerAddress = msg.sender;
         uint96  ticketPrice   = matches[matchId].ticketPrice; //800 gas
         // check if sender amount is divisble by ticketPrice
-        require(_amount % ticketPrice == 0, "deposit amount should be divisble by ticketPrice");
+        require(_amount % ticketPrice == 0, "deposit amount should be divisible by ticket price");
         
         bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
         require(success, "deposit failed");
@@ -163,7 +172,7 @@ contract Auction {
         uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
         if (currentCount == 0) {
             // create new slot for new player 
-            playerData[matchId][playerAddress].ticketCount = ticketCount;
+            playerData[matchId][playerAddress] = Player(ticketCount, 0);
             playerList[matchId].push(playerAddress);
             
             // increase number of player, this can be optimized
@@ -180,7 +189,7 @@ contract Auction {
 
     // // call this function to publish lottery result
     // if not enough winining ticket published, no one can withdraw money => people are incentivize to invoke this function
-    function publish_lottery_result(string memory matchId) public validMatch(matchId) { // 3 storage change at most
+    function publish_lottery_result(string memory matchId) public validMatch(matchId) returns(address) { // 3 storage change at most
     
         require(matches[matchId].expiryDate < block.timestamp, "Match is not closed");
         
@@ -209,10 +218,11 @@ contract Auction {
             matches[matchId].randomUpperbound --; 
         }
     	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
+        return winnerAddress;
     }
     
     
-    function withdrawReward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
+    function withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
         
         address playerAddress = msg.sender;
         Player memory player = playerData[matchId][playerAddress];
@@ -230,7 +240,7 @@ contract Auction {
         require(success, "withdraw new token not success"); // if failed then reverted to initial state
     }
     
-    function withdrawDeposit(string memory matchId) public matchFinished(matchId) {
+    function withdraw_deposit(string memory matchId) public matchFinished(matchId) {
         
         address playerAddress = msg.sender;
         Player memory player = playerData[matchId][playerAddress];
@@ -247,8 +257,58 @@ contract Auction {
     }
     
     // getters 
-    function getPlayer(string memory matchId, address playerAddress) public validMatch(matchId) view returns(uint128, uint128) {
+    function get_player(string memory matchId, address playerAddress) public validMatch(matchId) view returns(uint128, uint128) {
         Player memory player = playerData[matchId][playerAddress];
         return (player.ticketCount, player.winningCount);
     }
+
+    function get_match(string memory matchId) public validMatch(matchId) view returns (address, uint96, address, uint96, uint64, uint128, uint32, uint32, uint) {
+        Match memory amatch = matches[matchId];
+        return (
+            amatch.creatorAddress,
+            amatch.ticketReward,
+            amatch.tokenContractAddress, 
+            amatch.ticketPrice,
+            amatch.expiryDate,
+            amatch.futureBlock,
+            amatch.winningCount, 
+            amatch.maxWinning,
+            amatch.randomUpperbound
+        );
+    }
+
+    // functions only for testing purpose
+    // PLEASE delete this on deployment
+
+    // function fake_publish_lottery_result(string memory matchId, uint nextWinner) public validMatch(matchId) returns(address) { // 3 storage change at most
+    //     require(admin == msg.sender, "Only admin can do this");
+
+    //     require(matches[matchId].expiryDate < block.timestamp, "Match is not closed");
+        
+    // 	uint futureBlock = matches[matchId].futureBlock;
+    //     require(futureBlock < block.number, "future block has not been generated");
+        
+    //     // get random between 0 and randomUpperbound
+    //     uint upperBound = matches[matchId].randomUpperbound;
+    //     require(upperBound > 0, "random upper bound should be greater than 0");
+        
+    //     // get next winner
+    //     // uint    nextWinner = random(upperBound, futureBlock);
+    //     address winnerAddress = playerList[matchId][nextWinner];
+    //     // increase number of winning ticket 
+    //     playerData[matchId][winnerAddress].winningCount ++;
+        
+    //     // if winning ticket reach his max, swap to end in order not to being randomed again
+    //     Player memory player = playerData[matchId][winnerAddress]; // load into memory once to save gas
+
+    //     if (player.ticketCount == player.winningCount) {
+    //         // swap address and decrease randomUpperbound
+    //         // swap current person to the last slot 
+    //         (playerList[matchId][nextWinner],  playerList[matchId][upperBound-1]) = (playerList[matchId][upperBound-1],  playerList[matchId][nextWinner]);
+    //         // not consider the last person any more, because he wins all his ticket
+    //         matches[matchId].randomUpperbound --; 
+    //     }
+    // 	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
+    //     return winnerAddress;
+    // }
 }
