@@ -75,15 +75,8 @@ contract Auction {
     modifier matchFinished(string memory matchId){
         Match memory amatch = matches[matchId];
         require(amatch.creatorAddress != ADDRESS_NULL && amatch.expiryDate < block.timestamp, "Invalid match or match is not closed yet");
-
-        // if number of ticket < number of max winning ticket 
-        if (amatch.winningCount < amatch.maxWinning && playerList[matchId].length > 0) {
-            Player memory player = playerData[matchId][playerList[matchId][0]];
-            require(player.winningCount == player.ticketCount, "match is not finished");
-        }
-        else {
-            require(amatch.winningCount == amatch.maxWinning, "match is not finished");
-        }
+        // if no more candidate player in list or winningCount reached
+        require (playerList[matchId].length == 0 || amatch.winningCount >= amatch.maxWinning, "match is not finished");
         _;
     }
 
@@ -201,11 +194,11 @@ contract Auction {
         require(futureBlock < block.number, "future block has not been generated");
         
         // get random between 0 and randomUpperbound
-        uint upperBound = playerList[matchId].length;
-        require(upperBound > 0, "random upper bound should be greater than 0");
+        uint playerListLength = playerList[matchId].length;
+        require(playerListLength > 0, "player list length should be greater than 0");
         
         // get next winner
-        uint    nextWinner = random(upperBound, futureBlock);
+        uint    nextWinner = random(playerListLength, futureBlock);
         address winnerAddress = playerList[matchId][nextWinner];
 
         // increase number of winning ticket 
@@ -218,7 +211,7 @@ contract Auction {
         if (player.ticketCount == player.winningCount) {
             // swap address and decrease randomUpperbound
             // swap current person to the last slot 
-            playerList[matchId][nextWinner] = playerList[matchId][upperBound-1];
+            playerList[matchId][nextWinner] = playerList[matchId][playerListLength-1];
             // not consider the last person any more, because he wins all his ticket
             playerList[matchId].pop(); 
         }
@@ -243,7 +236,7 @@ contract Auction {
         
         // load winning count
         uint128 winningCount = player.winningCount;
-        require(winningCount > 0, "You must have winning ticket to withdraw");
+        require(winningCount > 0, "must have winning ticket to withdraw");
  
         // update wining tickets in storage
         playerData[matchId][playerAddress].ticketCount -= winningCount;
