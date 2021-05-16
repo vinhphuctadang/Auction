@@ -61,7 +61,6 @@ contract("Test deposit", accounts => {
         tx = await auctionContract.auction("thorMatch", timeMarker + 10, blockCount + 100, 10, 5, 10, bamContract.address, {from : Thor});
         logger.debug("Transaction gas used:", tx.receipt.gasUsed);
         logger.debug(tx.logs[0].args);
-
     })
 
     it("should not let deposit to invalid match", async()=>{
@@ -117,27 +116,18 @@ contract("Test deposit", accounts => {
     // TODO: should test not enough balance
     it("should create new player data on first deposit, deposit 3 tickets, 0 winning count", async()=>{
         let tx;
+
+        let previousContractBalance = (await usdcContract.balanceOf(auctionContract.address)).toNumber()
         tx = await auctionContract.deposit("thorMatch", 15, {from: Steve});    
+        let currentContractBalance = (await usdcContract.balanceOf(auctionContract.address)).toNumber()
+
         logger.debug("Transaction gas used for deposit:", tx.receipt.gasUsed);
 
         tx = await auctionContract.get_player("thorMatch", Steve, {from: Steve});
         assert.strictEqual(tx['0'].toString(), '3'); // 3 tickets
-        assert.strictEqual(tx['1'].toString(), '0'); // 0 winning 
-
-        // get match and check upper bound limit
-
-        // check created information by using getter
-        let amatch = await auctionContract.get_match("tonyMatch");
-        // logger.debug("Match:", amatch);
-        // standardize to js primitive type
-
-        let matchData = []
-        for(let key in amatch) {
-            let x = amatch[key].toString()
-            matchData.push(x);
-        }
-
-        assert.strictEqual(matchData['8'], '1')
+        assert.strictEqual(tx['1'].toString(), '0'); // 0 winning
+        
+        assert.strictEqual(currentContractBalance - previousContractBalance, 15)
     })
 
     it("should increase ticket count to 5 on second time deposit", async()=>{
@@ -149,20 +139,6 @@ contract("Test deposit", accounts => {
         tx = await auctionContract.get_player("thorMatch", Steve, {from: Steve});
         assert.strictEqual(tx['0'].toString(), '5'); // 3 tickets
         assert.strictEqual(tx['1'].toString(), '0'); // 0 winning 
-
-        // check created information by using getter
-        let amatch = await auctionContract.get_match("tonyMatch");
-        // logger.debug("Match:", amatch);
-        // standardize to js primitive type
-
-        let matchData = []
-        for(let key in amatch) {
-            let x = amatch[key].toString()
-            matchData.push(x);
-        }
-
-        // still be one
-        assert.strictEqual(matchData['8'], '1')
     })
 
     it("should not let desposit to closed match", async()=>{

@@ -230,15 +230,15 @@ contract Auction {
     function withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
         
         address playerAddress = msg.sender;
-        Player memory player = playerData[matchId][playerAddress];
-        
+        // update wining tickets in storage
+        Player storage player = playerData[matchId][playerAddress];
+
         // load winning count
         uint128 winningCount = player.winningCount;
         require(winningCount > 0, "must have winning ticket to withdraw");
  
-        // update wining tickets in storage
-        playerData[matchId][playerAddress].ticketCount -= winningCount;
-        playerData[matchId][playerAddress].winningCount = 0;
+        player.ticketCount -= winningCount;
+        player.winningCount = 0;
         
         // send token
         bool success = ERC20(matches[matchId].tokenContractAddress).transfer(newTokenRecipient, winningCount * matches[matchId].ticketReward);

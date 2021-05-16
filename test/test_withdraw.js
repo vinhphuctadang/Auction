@@ -144,7 +144,7 @@ contract("Test withdraw reward token", accounts => {
         }
     })
 
-    it("shoud reveal the last winner and allow winners to withdraw bam token", async()=>{
+    it("shoud reveal the last winner and allow a winner to withdraw bam token", async()=>{
         let tx
         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed);
@@ -167,7 +167,7 @@ contract("Test withdraw reward token", accounts => {
         let currentCreatorBalance = await auctionContract.get_creator_balance(Thor)
 
         assert.strictEqual(currentWinerBalance    - previousWinerBalance,       bamReward * winningCount)
-        assert.strictEqual(currentContractBalance - previousContractBalance, - bamReward * winningCount)
+        assert.strictEqual(currentContractBalance - previousContractBalance,  - bamReward * winningCount)
         assert.strictEqual(currentCreatorBalance  - previousCreatorBalance,    ticketPrice * winningCount)
 
         player = await auctionContract.get_player("thorMatch", winnerAddress)
@@ -198,19 +198,30 @@ contract("Test withdraw reward token", accounts => {
         throw `It should throw error "must have winning ticket to withdraw" but actually it does not`
     })
 
-    it("should allow player to withdraw usdc", async()=>{
+    it("should allow player to withdraw usdc and verify balances of all players", async()=>{
         for(let playerAddress in depositAmount) {
             // get current player tickets
             let player = await auctionContract.get_player("thorMatch", playerAddress)
             let previousTotalTicket = player[0].toNumber()
             let previousWinningCount = player[1].toNumber()
-            await auctionContract.withdraw_deposit("thorMatch", {from: playerAddress})
+            let previousPlayerUsdc = (await usdcContract.balanceOf(playerAddress)).toNumber()
+
+            await auctionContract.withdraw_deposit("thorMatch", { from: playerAddress })
 
             player = await auctionContract.get_player("thorMatch", playerAddress)
             let currentTotalTicket = player[0].toNumber()
             let currentWinningCount = player[1].toNumber()
-            assert.strictEqual(currentTotalTicket - previousTotalTicket, previousWinningCount)
+            let currentPlayerUsdc = (await usdcContract.balanceOf(playerAddress)).toNumber()
+            
+            // money in wallet first
+            assert.strictEqual(currentPlayerUsdc - previousPlayerUsdc, (previousTotalTicket - currentTotalTicket) * ticketPrice,
+                `previousPlayerUsdc: ${previousPlayerUsdc}, currentPlayerUsdc ${currentPlayerUsdc}`)
+            // no changes in creator balance
+            // check in contract
             assert.strictEqual(currentWinningCount, previousWinningCount)
+            assert.strictEqual(currentTotalTicket, previousWinningCount, 
+                `player ${addressToName[playerAddress]} have current ticket of ${currentTotalTicket}, previous: ${previousTotalTicket}, expected: ${previousWinningCount},
+                but the fact is ${currentTotalTicket - previousTotalTicket}`)
         }
     })
 
@@ -220,7 +231,7 @@ contract("Test withdraw reward token", accounts => {
         let currentCreatorBalance = await auctionContract.get_creator_balance(Thor)
         // verify that money is withdrawed
         assert.strictEqual(currentCreatorBalance.toNumber(), 0)
-        assert.strictEqual(await usdcContract.balanceOf(Thor), previousCreatorBalance)
+        assert.strictEqual((await usdcContract.balanceOf(Thor)).toNumber(), previousCreatorBalance.toNumber())
     })
 
     it("should not allow Natasha to withdraw as creator when she has no balance", async()=>{
@@ -236,7 +247,7 @@ contract("Test withdraw reward token", accounts => {
 
     it("should not allow Natasha to withdraw because she has no tickets", async()=>{
         try {
-            await auctionContract.withdraw_deposit({from: Natasha})
+            await auctionContract.withdraw_deposit("thorMatch", {from: Natasha})
         }
         catch(err) {
             logger.debug(err.toString())
