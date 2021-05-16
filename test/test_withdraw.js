@@ -108,7 +108,7 @@ contract("Test withdraw reward token", accounts => {
 
     it("should deny withdraw when the match is not closed", async()=>{
         try {
-            await auctionContract.withdraw_reward("thorMatch", Steve, {from: Steve})
+            await auctionContract.player_withdraw_reward("thorMatch", Steve, {from: Steve})
         }
         catch(err) {
             logger.debug(err.toString())
@@ -136,7 +136,7 @@ contract("Test withdraw reward token", accounts => {
         
         logger.info("Winner try to withdraw")
         try {
-            await auctionContract.withdraw_reward("thorMatch", winnerAddress, {from: winnerAddress})
+            await auctionContract.player_withdraw_reward("thorMatch", winnerAddress, {from: winnerAddress})
         }
         catch(err) {
             logger.debug(err.toString())
@@ -161,14 +161,17 @@ contract("Test withdraw reward token", accounts => {
         let previousContractBalance = await bamContract.balanceOf(auctionContract.address)
         let previousCreatorBalance = await auctionContract.get_creator_balance(Thor)
 
-        await auctionContract.withdraw_reward("thorMatch", winnerAddress, {from: winnerAddress})
+        tx = await auctionContract.player_withdraw_reward("thorMatch", winnerAddress, {from: winnerAddress})
+        logger.debug("player_withdraw_reward tx gas used:", tx.receipt.gasUsed);
         let currentWinerBalance = await bamContract.balanceOf(winnerAddress)
         let currentContractBalance = await bamContract.balanceOf(auctionContract.address)
         let currentCreatorBalance = await auctionContract.get_creator_balance(Thor)
 
         assert.strictEqual(currentWinerBalance    - previousWinerBalance,       bamReward * winningCount)
         assert.strictEqual(currentContractBalance - previousContractBalance,  - bamReward * winningCount)
-        assert.strictEqual(currentCreatorBalance  - previousCreatorBalance,    ticketPrice * winningCount)
+
+        // creator balance is not changed
+        assert.strictEqual(currentCreatorBalance  - previousCreatorBalance,    0) 
 
         player = await auctionContract.get_player("thorMatch", winnerAddress)
         let totalTicket = player[0].toNumber(), 
@@ -189,7 +192,7 @@ contract("Test withdraw reward token", accounts => {
         }
         // that person is not allowed to withdraw
         try {
-            await auctionContract.withdraw_reward("thorMatch", addressHavingNoWinning, {from: addressHavingNoWinning})
+            await auctionContract.player_withdraw_reward("thorMatch", addressHavingNoWinning, {from: addressHavingNoWinning})
         }
         catch(err) {
             logger.debug(err.toString())
@@ -206,7 +209,8 @@ contract("Test withdraw reward token", accounts => {
             let previousWinningCount = player[1].toNumber()
             let previousPlayerUsdc = (await usdcContract.balanceOf(playerAddress)).toNumber()
 
-            await auctionContract.withdraw_deposit("thorMatch", { from: playerAddress })
+            let tx = await auctionContract.player_withdraw_deposit("thorMatch", { from: playerAddress })
+            logger.debug("player_withdraw_deposit tx gas used:", tx.receipt.gasUsed);
 
             player = await auctionContract.get_player("thorMatch", playerAddress)
             let currentTotalTicket = player[0].toNumber()
@@ -227,7 +231,8 @@ contract("Test withdraw reward token", accounts => {
 
     it("should allow creator to withdraw usdc", async()=>{
         let previousCreatorBalance = await auctionContract.get_creator_balance(Thor)
-        await auctionContract.creator_withdraw({from: Thor})
+        let tx = await auctionContract.creator_withdraw({from: Thor})
+        logger.debug("creator_withdraw tx gas used:", tx.receipt.gasUsed);
         let currentCreatorBalance = await auctionContract.get_creator_balance(Thor)
         // verify that money is withdrawed
         assert.strictEqual(currentCreatorBalance.toNumber(), 0)
@@ -247,7 +252,7 @@ contract("Test withdraw reward token", accounts => {
 
     it("should not allow Natasha to withdraw because she has no tickets", async()=>{
         try {
-            await auctionContract.withdraw_deposit("thorMatch", {from: Natasha})
+            await auctionContract.player_withdraw_deposit("thorMatch", {from: Natasha})
         }
         catch(err) {
             logger.debug(err.toString())

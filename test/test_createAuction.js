@@ -48,7 +48,7 @@ contract("Test (create) auction", accounts => {
         logger.debug("thor approve tx log:", tx);
         // Thor create
         tx = await auctionContract.auction("thorMatch", parseInt(Date.now() / 1000) + 10, 5000, 10, 2, 10, bamContract.address, {from : Thor});
-        logger.debug(tx.logs[0].args);
+        logger.debug("auction() gas used:", tx.receipt.gasUsed);
         
         // Tony create the same code:
         try {
@@ -116,6 +116,7 @@ contract("Test (create) auction", accounts => {
         let blockCount = parseInt(await helperContract.get_block_count({from: Tony}))
         let expiryDate = parseInt(Date.now() / 1000) + 10
         tx = await auctionContract.auction("tonyMatch", expiryDate, blockCount + 10, 10, 2, 10, bamContract.address, {from : Tony});
+        logger.debug("auction() gas used:", tx.receipt.gasUsed);
         // check emitted event
         logger.debug("Event:", tx.logs);
 

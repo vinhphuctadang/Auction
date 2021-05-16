@@ -256,10 +256,13 @@ contract("Test publish lottery result on normal cases", accounts => {
             await helperContract.dummy_assign()
         }
 
+        // current balance 
+        let previousCreatorBalance = (await auctionContract.get_creator_balance(Thor)).toNumber()
         // random 
         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed);
         let winnerAddress = tx.logs[0].args[1]
+        
         
         logger.debug("Winner addr:", winnerAddress, ", alias:", addressToName[winnerAddress])
         player = await auctionContract.get_player("thorMatch", winnerAddress, { from: Tony });
@@ -268,12 +271,18 @@ contract("Test publish lottery result on normal cases", accounts => {
         assert.strictEqual(player[0].toString(), parseInt(depositAmount[winnerAddress] / ticketPrice).toString())
         // winning ticket is added by 1
         assert.strictEqual(player[1].toString(), '1')
+
+        let currentCreatorBalance = (await auctionContract.get_creator_balance(Thor)).toNumber()
+        assert.strictEqual(previousCreatorBalance, 0)
+        // because each publish() we increase creator balance to ticketPrice
+        assert.strictEqual(currentCreatorBalance, ticketPrice)
     })
 
-    it("shoud find that winning tickets does not exceeds number of deposited", async()=> {
+    it("shoud find that winning tickets does not exceeds number of purchased tickets", async()=> {
         let tx
         let winners = []
         let winnerAddresses = []
+        let previousCreatorBalance = (await auctionContract.get_creator_balance(Thor)).toNumber()
         for(let i = 1; i<10; ++i) {
             tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
             logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed);
@@ -298,6 +307,10 @@ contract("Test publish lottery result on normal cases", accounts => {
         for(let winnerAddress in count) {
             assert(count[winnerAddress] <= parseInt(depositAmount[winnerAddress] / ticketPrice), "Winning ticket exceeds deposited")
         }
+
+        let currentCreatorBalance = (await auctionContract.get_creator_balance(Thor)).toNumber()
+        // check creator balance
+        assert.strictEqual(currentCreatorBalance - previousCreatorBalance, ticketPrice * 9) // generate more 9 tickets
     });
 
     it("should not allow people to publish more result when winningTicket reach max", async()=>{

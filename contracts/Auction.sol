@@ -67,6 +67,11 @@ contract Auction {
 
     address admin;
 
+    modifier creatorOnly(string memory matchId) {
+        require(matches[matchId].creatorAddress == msg.sender, "invalid match");
+        _;
+    }
+
     modifier validMatch(string memory matchId) {
         require(matches[matchId].creatorAddress != ADDRESS_NULL, "invalid match");
         _;
@@ -199,9 +204,11 @@ contract Auction {
         uint    nextWinner = random(playerListLength, futureBlock);
         address winnerAddress = playerList[matchId][nextWinner];
 
-        // increase number of winning ticket 
+        // increase number of winning ticket to player
         playerData[matchId][winnerAddress].winningCount ++;
         matches[matchId].winningCount ++;
+        // increase usdc balance of creator
+        creatorBalance[amatch.creatorAddress] += amatch.ticketPrice;
         
         // if winning ticket reach his max, swap to end in order not to being randomed again
         Player memory player = playerData[matchId][winnerAddress]; // load into memory once to save gas
@@ -227,7 +234,7 @@ contract Auction {
         require(success, "withdraw not success"); // if failed then reverted to initial state
     }
     
-    function withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
+    function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
         
         address playerAddress = msg.sender;
         // update wining tickets in storage
@@ -243,12 +250,9 @@ contract Auction {
         // send token
         bool success = ERC20(matches[matchId].tokenContractAddress).transfer(newTokenRecipient, winningCount * matches[matchId].ticketReward);
         require(success, "withdraw new token not success"); // if failed then reverted to initial state
-
-        // if withdraw success then increase creator's balance
-        creatorBalance[matches[matchId].creatorAddress] += winningCount * matches[matchId].ticketPrice;
     }
     
-    function withdraw_deposit(string memory matchId) public matchFinished(matchId) {
+    function player_withdraw_deposit(string memory matchId) public matchFinished(matchId) {
         
         address playerAddress = msg.sender;
         Player memory player = playerData[matchId][playerAddress];
@@ -287,6 +291,17 @@ contract Auction {
     function get_creator_balance(address creatorAddress) public view returns(uint){
         return creatorBalance[creatorAddress];
     }
+
+
+    // // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
+    // function creator_withdraw_reward(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
+    //     Match memory amatch = matches[matchId];
+    //     require(amatch.maxWinning > amatch.winningCount, "invalid max wining ticket");
+    //     uint remainingTicket = amatch.maxWinning - amatch.winningCount;
+        
+    //     bool success = ERC20(amatch.creatorAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
+    //     require(success, "withdraw not success");
+    // }
 
     // ------------------------------------------
     // functions only for testing purpose
