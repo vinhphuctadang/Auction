@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 library SafeMath {
   function add(uint128 a, uint128 b) internal pure returns (uint128 c) {
     c = a + b;
-    assert(c >= a);
+    require (c >= a, "sum c must be larger or equals to a");
     return c;
   }
 }
@@ -50,11 +50,12 @@ contract Auction {
         uint64  expiryDate;
         uint128 futureBlock;
         uint32  winningCount; 
-        uint32  maxWinning; 
-        uint randomUpperbound;
+        uint32  maxWinning;
     }
     
     // state data
+    // creator balance in usdc, address -> amount of money
+    mapping(address => uint) creatorBalance;
     // match id -> Match
     mapping(string => Match) matches;
     // player data for each match, use mapping for quick access 
@@ -78,10 +79,10 @@ contract Auction {
         // if number of ticket < number of max winning ticket 
         if (amatch.winningCount < amatch.maxWinning && playerList[matchId].length > 0) {
             Player memory player = playerData[matchId][playerList[matchId][0]];
-            require(player.winningCount == player.ticketCount, "Match is not finished");
+            require(player.winningCount == player.ticketCount, "match is not finished");
         }
         else {
-            require(amatch.winningCount == amatch.maxWinning, "Match is not finished");
+            require(amatch.winningCount == amatch.maxWinning, "match is not finished");
         }
         _;
     }
@@ -102,7 +103,7 @@ contract Auction {
             return 0;
         }
         // random number = futureBlock + blop
-        return uint(keccak256(abi.encodePacked(blockhash(blockNumber - 1), block.timestamp))) % upper_bound;
+        return uint(keccak256(abi.encodePacked(blockhash(blockNumber - 1), blockhash(block.number - 1), block.timestamp))) % upper_bound;
     }
     
     constructor(address usdcContractAddress) { 
@@ -144,7 +145,7 @@ contract Auction {
             tokenContractAddress, 
             ticketPrice, 
             expiryDate, futureBlock, 
-            0, maxWinning, 0
+            0, maxWinning 
         ); // estimate gas: 4*23000 -> 5*23000
         
         // emit creating auction event
@@ -174,12 +175,11 @@ contract Auction {
             // create new slot for new player 
             playerData[matchId][playerAddress] = Player(ticketCount, 0);
             playerList[matchId].push(playerAddress);
-            
             // increase number of player, this can be optimized
-            matches[matchId].randomUpperbound ++;
+            // matches[matchId].randomUpperbound ++;
         }
         else {
-            // just increase ticket count 
+            // just increase ticket count
             playerData[matchId][playerAddress].ticketCount = currentCount.add(ticketCount);
         }
         
@@ -190,37 +190,51 @@ contract Auction {
     // // call this function to publish lottery result
     // if not enough winining ticket published, no one can withdraw money => people are incentivize to invoke this function
     function publish_lottery_result(string memory matchId) public validMatch(matchId) returns(address) { // 3 storage change at most
-    
-        require(matches[matchId].expiryDate < block.timestamp, "Match is not closed");
+
+        Match memory amatch = matches[matchId];
+        // check if match closed
+        require(amatch.expiryDate < block.timestamp, "match is not closed");
+        // check if max wining reached
+        require(amatch.winningCount < amatch.maxWinning, "max wining reached");
         
-    	uint futureBlock = matches[matchId].futureBlock;
+    	uint futureBlock = amatch.futureBlock;
         require(futureBlock < block.number, "future block has not been generated");
         
         // get random between 0 and randomUpperbound
-        uint upperBound = matches[matchId].randomUpperbound;
+        uint upperBound = playerList[matchId].length;
         require(upperBound > 0, "random upper bound should be greater than 0");
         
         // get next winner
         uint    nextWinner = random(upperBound, futureBlock);
         address winnerAddress = playerList[matchId][nextWinner];
+
         // increase number of winning ticket 
         playerData[matchId][winnerAddress].winningCount ++;
+        matches[matchId].winningCount ++;
         
         // if winning ticket reach his max, swap to end in order not to being randomed again
         Player memory player = playerData[matchId][winnerAddress]; // load into memory once to save gas
 
         if (player.ticketCount == player.winningCount) {
-            // swap address and decrease randomUpperbound 
-            
+            // swap address and decrease randomUpperbound
             // swap current person to the last slot 
-            (playerList[matchId][nextWinner],  playerList[matchId][upperBound-1]) = (playerList[matchId][upperBound-1],  playerList[matchId][nextWinner]);
+            playerList[matchId][nextWinner] = playerList[matchId][upperBound-1];
             // not consider the last person any more, because he wins all his ticket
-            matches[matchId].randomUpperbound --; 
+            playerList[matchId].pop(); 
         }
+
     	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
         return winnerAddress;
     }
     
+    function creator_withdraw() public payable { // creator withdraw his balance
+        uint balance = creatorBalance[msg.sender];
+        require(balance > 0, "creator balance must be greater than 0");
+        creatorBalance[msg.sender] = 0;
+        // send token
+        bool success = ERC20(USDC_ADDRESS).transfer(msg.sender, balance);
+        require(success, "withdraw not success"); // if failed then reverted to initial state
+    }
     
     function withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
         
@@ -238,6 +252,9 @@ contract Auction {
         // send token
         bool success = ERC20(matches[matchId].tokenContractAddress).transfer(newTokenRecipient, winningCount * matches[matchId].ticketReward);
         require(success, "withdraw new token not success"); // if failed then reverted to initial state
+
+        // if withdraw success then increase creator's balance
+        creatorBalance[matches[matchId].creatorAddress] += winningCount * matches[matchId].ticketPrice;
     }
     
     function withdraw_deposit(string memory matchId) public matchFinished(matchId) {
@@ -255,14 +272,14 @@ contract Auction {
         bool success = ERC20(USDC_ADDRESS).transfer(playerAddress, remainTicket * matches[matchId].ticketPrice);
         require(success, "withdraw deposit not success");
     }
-    
+
     // getters 
     function get_player(string memory matchId, address playerAddress) public validMatch(matchId) view returns(uint128, uint128) {
         Player memory player = playerData[matchId][playerAddress];
         return (player.ticketCount, player.winningCount);
     }
 
-    function get_match(string memory matchId) public validMatch(matchId) view returns (address, uint96, address, uint96, uint64, uint128, uint32, uint32, uint) {
+    function get_match(string memory matchId) public validMatch(matchId) view returns (address, uint96, address, uint96, uint64, uint128, uint32, uint32) {
         Match memory amatch = matches[matchId];
         return (
             amatch.creatorAddress,
@@ -272,14 +289,18 @@ contract Auction {
             amatch.expiryDate,
             amatch.futureBlock,
             amatch.winningCount, 
-            amatch.maxWinning,
-            amatch.randomUpperbound
+            amatch.maxWinning
         );
     }
 
-    // functions only for testing purpose
-    // PLEASE delete this on deployment
+    function get_creator_balance(address creatorAddress) public view returns(uint){
+        return creatorBalance[creatorAddress];
+    }
 
+    // ------------------------------------------
+    // functions only for testing purpose
+    // CAUTION: PLEASE delete this on deployment
+    // ------------------------------------------
     // function fake_publish_lottery_result(string memory matchId, uint nextWinner) public validMatch(matchId) returns(address) { // 3 storage change at most
     //     require(admin == msg.sender, "Only admin can do this");
 
@@ -311,4 +332,5 @@ contract Auction {
     // 	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
     //     return winnerAddress;
     // }
+    // ---------------------------------------------------------
 }

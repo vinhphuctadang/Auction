@@ -47,7 +47,7 @@ contract("Test (create) auction", accounts => {
         tx = await bamContract.approve(auctionContract.address,  100, { from: Thor });
         logger.debug("thor approve tx log:", tx);
         // Thor create
-        tx = await auctionContract.auction("thorMatch", parseInt(Date.now() / 1000) + 10, 1000, 10, 2, 10, bamContract.address, {from : Thor});
+        tx = await auctionContract.auction("thorMatch", parseInt(Date.now() / 1000) + 10, 5000, 10, 2, 10, bamContract.address, {from : Thor});
         logger.debug(tx.logs[0].args);
         
         // Tony create the same code:
@@ -152,7 +152,6 @@ contract("Test (create) auction", accounts => {
             (blockCount + 10).toString(),
             '0',
             '10',
-            '0'
         ]
 
         // deep equals just produces weird error on types

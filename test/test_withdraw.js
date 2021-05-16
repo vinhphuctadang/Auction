@@ -40,7 +40,7 @@ contract("Test withdraw reward token", accounts => {
     })
 
     it("shoud deny withdraw when winning count == 0", async()=>{
-
+        
     })
 })
 
