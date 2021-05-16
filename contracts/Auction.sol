@@ -74,7 +74,7 @@ contract Auction {
     
     modifier matchFinished(string memory matchId){
         Match memory amatch = matches[matchId];
-        require(amatch.creatorAddress != ADDRESS_NULL && amatch.expiryDate < block.timestamp, "Invalid match or match is not closed yet");
+        require(amatch.creatorAddress != ADDRESS_NULL && amatch.expiryDate < block.timestamp, "invalid match or match is not closed yet");
         // if no more candidate player in list or winningCount reached
         require (playerList[matchId].length == 0 || amatch.winningCount >= amatch.maxWinning, "match is not finished");
         _;
@@ -168,8 +168,6 @@ contract Auction {
             // create new slot for new player 
             playerData[matchId][playerAddress] = Player(ticketCount, 0);
             playerList[matchId].push(playerAddress);
-            // increase number of player, this can be optimized
-            // matches[matchId].randomUpperbound ++;
         }
         else {
             // just increase ticket count
@@ -257,7 +255,7 @@ contract Auction {
         
         // remaining ticket
         uint128 remainTicket = player.ticketCount - player.winningCount;
-        
+        require(remainTicket > 0, "there must be losing ticket to withdraw");
         // update number of remaning
         playerData[matchId][playerAddress].ticketCount = player.winningCount;
         
