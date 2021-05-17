@@ -160,11 +160,10 @@ contract Auction {
         // check if sender amount is divisble by ticketPrice
         require(_amount % ticketPrice == 0, "deposit amount should be divisible by ticket price");
         
-        bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
-        require(success, "deposit failed");
-        
         uint128 ticketCount = _amount / ticketPrice;
         uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
+
+
         if (currentCount == 0) {
             // create new slot for new player 
             playerData[matchId][playerAddress] = Player(ticketCount, 0);
@@ -174,6 +173,9 @@ contract Auction {
             // just increase ticket count
             playerData[matchId][playerAddress].ticketCount = currentCount.add(ticketCount);
         }
+
+        bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
+        require(success, "deposit failed");
         
         // emit deposit event
         emit DepositEvent(matchId, playerAddress, _amount, ticketCount);
@@ -219,6 +221,17 @@ contract Auction {
 
     	emit PublishedEvent(matchId, winnerAddress, amatch.winningCount + 1);
         return winnerAddress;
+    }
+
+    // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
+    function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
+        Match memory amatch = matches[matchId];
+        require(amatch.maxWinning > amatch.winningCount, "no more unused wining ticket");
+        uint remainingTicket = amatch.maxWinning - amatch.winningCount;
+        matches[matchId].maxWinning = amatch.winningCount;
+        
+        bool success = ERC20(amatch.tokenContractAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
+        require(success, "withdraw not success");
     }
     
     function creator_withdraw_profit() public payable { // creator withdraw his balance
@@ -290,17 +303,6 @@ contract Auction {
 
     function get_player_count(string memory matchId) public view returns(uint) {
         return playerList[matchId].length;
-    }
-
-    // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
-    function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
-        Match memory amatch = matches[matchId];
-        require(amatch.maxWinning > amatch.winningCount, "no more unused wining ticket");
-        uint remainingTicket = amatch.maxWinning - amatch.winningCount;
-        matches[matchId].maxWinning = amatch.winningCount;
-        
-        bool success = ERC20(amatch.tokenContractAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
-        require(success, "withdraw not success");
     }
 
     // ------------------------------------------

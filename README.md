@@ -97,6 +97,21 @@ Scenario:
 Util all winning tickets revealed, no one can withdraw **except for creators can withdraw his usdc** from contract.
 Player can withdraw reward tokens and/or deposited token of their choice.
 
+In brief:
+
+```
+function auction(
+        string memory matchId, uint64 expiryDate, uint128 futureBlock, 
+        uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, 
+        address tokenContractAddress
+) public payables
+```
+
+
+```
+function deposit(string memory matchId, uint amount) public payable validMatch(matchId)
+```
+
 ## Acknowledgement:
 
 This repository uses contracts (ERC20) and derives safemMath library from https://openzeppelin.com/contracts/
