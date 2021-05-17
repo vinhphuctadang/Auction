@@ -16,11 +16,6 @@ library SafeMath {
   }
 }
 
-/*
-1. Where usdc of winning ticket goes 
-2. (Design): Can we optimize more 
-3. Create tests
-*/
 contract Auction {
     
     // use library
