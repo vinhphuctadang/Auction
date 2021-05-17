@@ -1,5 +1,8 @@
 const assert = require("assert")
 const logger = require("./logger")
+const utils = require('./utils')
+
+// contracts
 const Auction = artifacts.require("Auction")
 const USDC_TOKEN = artifacts.require("USDC_TOKEN")
 const BAM_TOKEN = artifacts.require("BAM_TOKEN")
@@ -119,6 +122,14 @@ contract("Test (create) auction", accounts => {
         logger.debug("auction() gas used:", tx.receipt.gasUsed);
         // check emitted event
         logger.debug("Event:", tx.logs);
+        utils.eventEquals(tx, "CreateAuctionEvent", {
+            matchId: "tonyMatch",
+            auctionCreator: Tony,
+            maxWinning: 10,
+            ticketPrice: 2,
+            ticketReward: 10,
+            tokenContractAddress: bamContract.address
+        })
 
         // check created information by using getter
         let amatch = await auctionContract.get_match("tonyMatch");

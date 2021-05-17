@@ -87,8 +87,8 @@ contract Auction {
     }
 
     // events
-    event CreateAuctionEvent(string matchId, address auctionCreator, uint maxWinning, uint ticketPrice, uint rewardPerTicket, address tokenContractAddress);
-    event DepositEvent(string matchId, address player, uint depositAmount, uint ticketCount);
+    event CreateAuctionEvent(string matchId, address auctionCreator, uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, address tokenContractAddress);
+    event DepositEvent(string matchId, address player, uint128 depositAmount, uint128 ticketCount);
     event PublishedEvent(string matchId, address winner, uint winningOrder);
     
     // util function 
@@ -181,7 +181,7 @@ contract Auction {
         }
         
         // emit deposit event
-        emit DepositEvent(matchId, playerAddress, amount, ticketCount);
+        emit DepositEvent(matchId, playerAddress, _amount, ticketCount);
     }
 
     // // call this function to publish lottery result
@@ -222,7 +222,7 @@ contract Auction {
             playerList[matchId].pop(); 
         }
 
-    	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
+    	emit PublishedEvent(matchId, winnerAddress, amatch.winningCount + 1);
         return winnerAddress;
     }
     

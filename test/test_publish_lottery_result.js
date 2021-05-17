@@ -1,9 +1,12 @@
 const assert = require("assert")
 const logger = require("./logger")
+const utils = require('./utils')
+
 const Auction = artifacts.require("Auction")
 const USDC_TOKEN = artifacts.require("USDC_TOKEN")
 const BAM_TOKEN = artifacts.require("BAM_TOKEN")
 const Helper = artifacts.require("Helper")
+
 
 async function sleep(ms){
 	return new Promise((resolve,reject)=>{
@@ -437,10 +440,17 @@ contract("Test publish lottery result on number of ticket > number of lottery de
         let winners = []
         for(let i = 0; i < totalTicket; ++i) {
             tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
+            
             logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed);
             // build winner array
             let winnerAddress = tx.logs[0].args[1]
             winners.push(addressToName[winnerAddress])
+
+            utils.eventEquals(tx, "PublishedEvent", {
+                matchId: "thorMatch", 
+                winner: winnerAddress, 
+                winningOrder: i + 1
+            })
         }
         logger.debug("Winners (respectively):", winners)
         

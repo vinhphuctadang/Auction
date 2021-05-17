@@ -1,9 +1,12 @@
 const assert = require("assert")
 const logger = require("./logger")
 const Auction = artifacts.require("Auction")
+const utils = require("./utils")
+
 const USDC_TOKEN = artifacts.require("USDC_TOKEN")
 const BAM_TOKEN = artifacts.require("BAM_TOKEN")
 const Helper = artifacts.require("Helper")
+
 
 async function sleep(ms){
 	return new Promise((resolve,reject)=>{
@@ -123,6 +126,13 @@ contract("Test deposit", accounts => {
 
         logger.debug("Transaction gas used for deposit:", tx.receipt.gasUsed);
 
+        utils.eventEquals(tx, "DepositEvent", {
+            matchId: "thorMatch", 
+            player: Steve, 
+            depositAmount: 15, 
+            ticketCount: 3
+        })
+
         tx = await auctionContract.get_player("thorMatch", Steve, {from: Steve});
         assert.strictEqual(tx['0'].toString(), '3'); // 3 tickets
         assert.strictEqual(tx['1'].toString(), '0'); // 0 winning
@@ -135,7 +145,13 @@ contract("Test deposit", accounts => {
         await usdcContract.increaseAllowance(auctionContract.address,  10, { from: Steve });
         tx = await auctionContract.deposit("thorMatch", 10, {from: Steve}); 
         logger.debug("Transaction gas used for deposit:", tx.receipt.gasUsed);
-   
+        utils.eventEquals(tx, "DepositEvent", {
+            matchId: "thorMatch", 
+            player: Steve, 
+            depositAmount: 10, 
+            ticketCount: 2
+        })
+
         tx = await auctionContract.get_player("thorMatch", Steve, {from: Steve});
         assert.strictEqual(tx['0'].toString(), '5'); // 3 tickets
         assert.strictEqual(tx['1'].toString(), '0'); // 0 winning 
