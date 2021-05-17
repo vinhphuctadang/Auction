@@ -68,7 +68,8 @@ contract Auction {
     address admin;
 
     modifier creatorOnly(string memory matchId) {
-        require(matches[matchId].creatorAddress == msg.sender, "invalid match");
+        address creatorAddress = matches[matchId].creatorAddress;
+        require(creatorAddress != ADDRESS_NULL && creatorAddress == msg.sender, "only creator allowed");
         _;
     }
 
@@ -225,7 +226,7 @@ contract Auction {
         return winnerAddress;
     }
     
-    function creator_withdraw() public payable { // creator withdraw his balance
+    function creator_withdraw_profit() public payable { // creator withdraw his balance
         uint balance = creatorBalance[msg.sender];
         require(balance > 0, "creator balance must be greater than 0");
         creatorBalance[msg.sender] = 0;
@@ -292,16 +293,20 @@ contract Auction {
         return creatorBalance[creatorAddress];
     }
 
+    function get_player_count(string memory matchId) public view returns(uint) {
+        return playerList[matchId].length;
+    }
 
-    // // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
-    // function creator_withdraw_reward(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
-    //     Match memory amatch = matches[matchId];
-    //     require(amatch.maxWinning > amatch.winningCount, "invalid max wining ticket");
-    //     uint remainingTicket = amatch.maxWinning - amatch.winningCount;
+    // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
+    function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
+        Match memory amatch = matches[matchId];
+        require(amatch.maxWinning > amatch.winningCount, "no more unused wining ticket");
+        uint remainingTicket = amatch.maxWinning - amatch.winningCount;
+        matches[matchId].maxWinning = amatch.winningCount;
         
-    //     bool success = ERC20(amatch.creatorAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
-    //     require(success, "withdraw not success");
-    // }
+        bool success = ERC20(amatch.tokenContractAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
+        require(success, "withdraw not success");
+    }
 
     // ------------------------------------------
     // functions only for testing purpose

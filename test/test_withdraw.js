@@ -13,6 +13,15 @@ async function sleep(ms){
 	})
 }
 
+async function generateBlocks(helperContract, expectedFutureBlock){
+    let blockCount = parseInt(await helperContract.get_block_count())
+    for(let i = blockCount; i <= expectedFutureBlock; ++i) {
+        logger.info(`Creating block ${i+1}, target: >${expectedFutureBlock} ...`)
+        // generate (expectedFutureBlock - blockCount + 1) blocks (to when future block created)
+        await helperContract.dummy_assign()
+    }
+}
+
 contract("Test withdraw reward token", accounts => {
     let Tony = accounts[0], 
         Thor = accounts[1], 
@@ -142,6 +151,8 @@ contract("Test withdraw reward token", accounts => {
             logger.debug(err.toString())
             return assert.strictEqual(err.reason, "match is not finished");
         }
+
+        throw `It should throw error "match is not finished" but actually it does not`
     })
 
     it("shoud reveal the last winner and allow a winner to withdraw bam token", async()=>{
@@ -231,17 +242,23 @@ contract("Test withdraw reward token", accounts => {
 
     it("should allow creator to withdraw usdc", async()=>{
         let previousCreatorBalance = await auctionContract.get_creator_balance(Thor)
-        let tx = await auctionContract.creator_withdraw({from: Thor})
+        let previousContractBalance = await usdcContract.balanceOf(auctionContract.address)
+
+        let tx = await auctionContract.creator_withdraw_profit({from: Thor})
         logger.debug("creator_withdraw tx gas used:", tx.receipt.gasUsed);
         let currentCreatorBalance = await auctionContract.get_creator_balance(Thor)
+        let currentContractBalance = await usdcContract.balanceOf(auctionContract.address)
+
         // verify that money is withdrawed
         assert.strictEqual(currentCreatorBalance.toNumber(), 0)
         assert.strictEqual((await usdcContract.balanceOf(Thor)).toNumber(), previousCreatorBalance.toNumber())
+        // usdc is withdrawed from contract
+        assert.strictEqual(currentContractBalance - previousContractBalance, -previousCreatorBalance.toNumber()) 
     })
 
     it("should not allow Natasha to withdraw as creator when she has no balance", async()=>{
         try {
-            await auctionContract.creator_withdraw({from: Natasha})
+            await auctionContract.creator_withdraw_profit({from: Natasha})
         }
         catch(err) {
             logger.debug(err.toString())
@@ -261,3 +278,199 @@ contract("Test withdraw reward token", accounts => {
         throw `It should throw error "creator balance must be greater than 0" but actually it does not`
     })
 })
+
+// contract("Test creator with draw deposit token", accounts =>{
+//     let Tony = accounts[0], 
+//         Thor = accounts[1], 
+//         Steve = accounts[2],
+//         Banner = accounts[3],
+//         Natasha = accounts[4];
+
+//     let auctionContract, 
+//         usdcContract, 
+//         bamContract,
+//         helperContract;
+    
+//     let depositAmount = {
+//         [Steve]: 10,
+//         [Banner]: 5, 
+//         [Tony]: 5,
+//     }
+//     let addressToName = {
+//         [Tony]: 'tony',
+//         [Thor]: 'thor',
+//         [Steve]: 'steve',
+//         [Banner]: 'banner',
+//         [Natasha]: 'natasha'
+//     }
+
+//     const bamReward = 10
+//     const ticketPrice = 5
+//     let expectedFutureBlock
+
+//     let winnerAddress
+
+//     it("should properly deploy contracts", async()=> {
+//         // require 4 contracts to be deployed 
+//         // create helper contract
+//         helperContract = await Helper.new({from: Tony})
+
+//         // create usdc contract 
+//         usdcContract = await USDC_TOKEN.new({from: Tony})
+//         logger.debug("usdcAddr:", usdcContract.address);
+//         assert(usdcContract.address != "", "USDC address is null")
+        
+//         // create bam contract
+//         bamContract  = await  BAM_TOKEN.new({from: Tony})
+//         logger.debug("bamAddr:", bamContract.address)
+//         assert(bamContract.address != "", "BAM address is null");
+
+//         // create auction contract
+//         auctionContract = await Auction.new(usdcContract.address, {from: Tony})
+//         logger.debug("auctionContract:", auctionContract.address);
+//         assert(auctionContract.address != "", "Auction address is null");
+
+//         // transfer money
+//         // we believe ERC20 transfer method !
+//         await usdcContract.transfer(Banner,  "1000", {from: Tony});
+//         await usdcContract.transfer(Steve, "1200", {from: Tony});
+//         await bamContract.transfer(Thor, "1200", {from: Tony});
+//     })
+
+//     it("should successfully create a valid match with 100 BAM deposited", async()=>{
+//         // Thor creates aution first
+//         let tx
+//         // Thor approve bam token
+//         tx = await bamContract.approve(auctionContract.address, 100, { from: Thor });
+//         let blockCount = parseInt(await helperContract.get_block_count({from: Thor}))
+//         expectedFutureBlock = blockCount + 20
+
+//         logger.debug("thor balance approval tx log:", tx.logs);
+
+//         timeMarker = parseInt(Date.now() / 1000)
+//         // Thor create a match
+//         tx = await auctionContract.auction("thorMatch", timeMarker + 10, expectedFutureBlock, 10, ticketPrice, bamReward, bamContract.address, {from : Thor});
+//         logger.debug(tx.logs[0].args);
+//     })
+
+//     it("should not let creator withdraw depsoit BAM when match is not closed", async()=>{
+//         try {
+//             await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
+//         }
+//         catch(err) {
+//             logger.error(err.toString())
+//             return assert.strictEqual(err.reason, "invalid match or match is not closed yet");
+//         }
+//         throw `It should throw error "invalid match or match is not closed yet" but actually it does not`
+//     })
+
+//     it("should not let creator withdraw deposit BAM when match is not finished", async()=>{
+
+//         let tx
+//         // everyone depsoit
+//         for(let player in depositAmount) {
+//             let amount = depositAmount[player]
+//             logger.info(`${addressToName[player]} starts deposit amount of ${amount}, playerAddress=${player}`)
+            
+//             await usdcContract.approve(auctionContract.address, amount, { from: player });
+//             tx = await auctionContract.deposit("thorMatch", amount, {from: player});
+
+//             // get player to check again
+//             player = await auctionContract.get_player("thorMatch", player, { from: player });
+//             assert.strictEqual(player[0].toString(), parseInt(amount / ticketPrice).toString())
+//             assert.strictEqual(player[1].toString(), '0')
+//         }
+
+
+//         // lets wait for 10 seconds 
+//         let sleepTime = 12
+//         logger.info(`Wait ${sleepTime}s for thorMatch match to close`);
+//         await sleep(sleepTime * 1000)
+
+//         // try withdraw
+//         try {
+//             await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
+//         }
+//         catch(err) {
+//             logger.error(err.toString())
+//             return assert.strictEqual(err.reason, "match is not finished");
+//         }
+//         throw `It should throw error "match is not finished" but actually it does not`
+//     })
+
+//     it("should publish 2 players, but max ticket count is 4", async()=>{
+//         // generate blocks
+//         await generateBlocks(helperContract, expectedFutureBlock);
+
+//         // publish winning tickets
+//         let tx, winnerAddress
+
+//         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
+//         winnerAddress = tx.logs[0].args[1]
+//         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed, `, winner is ${addressToName[winnerAddress]}`);
+
+//         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
+//         winnerAddress = tx.logs[0].args[1]
+//         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed, `, winner is ${addressToName[winnerAddress]}`);
+//     })
+
+//     it("should not let creator withdraw deposit BAM when match is not finished", async()=>{
+//         // try withdraw
+//         try {
+//             await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
+//         }
+//         catch(err) {
+//             logger.error(err.toString())
+//             return assert.strictEqual(err.reason, "match is not finished");
+//         }
+//         throw `It should throw error "match is not finished" but actually it does not`
+//     })
+
+//     it("should reveal all winners", async()=>{
+//         // reveal 2 more winner
+//         let tx, winnerAddress
+//         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
+//         winnerAddress = tx.logs[0].args[1]
+//         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed, `, winner is ${addressToName[winnerAddress]}`);
+
+//         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
+//         winnerAddress = tx.logs[0].args[1]
+//         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed, `, winner is ${addressToName[winnerAddress]}`);
+//     })
+
+//     it("should not let non-creator call withdraw from thorMatch", async()=>{
+//         try {
+//             await auctionContract.creator_withdraw_deposit("thorMatch", {from: Steve})
+//         }
+//         catch(err) {
+//             logger.error(err.toString())
+//             return assert.strictEqual(err.reason, "only creator allowed");
+//         }
+//         throw `It should throw error "only creator allowed" but actually it does not`
+//     })
+
+//     it("should let creator withdraw 60 BAM token", async()=>{
+//         let previousBAM = (await bamContract.balanceOf(Thor)).toNumber()
+//         await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
+//         let currentBAM = (await bamContract.balanceOf(Thor)).toNumber()
+
+//         assert.strictEqual(currentBAM - previousBAM, 60);
+
+//         // get and see winning tickets == max ticket
+//         let amatch = await auctionContract.get_match("thorMatch")
+//         let winningCount = amatch['6'].toString()
+//         let maxWining    = amatch['7'].toString()
+//         assert.strictEqual(winningCount == maxWining, true, `WinningCount and maxWining are not equals: winningCount:${winningCount}, maxWining: ${maxWining}`);
+//     })
+
+//     it("should not let creator call withdraw BAM again", async()=>{
+//         try {
+//             await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
+//         }
+//         catch(err) {
+//             logger.error(err.toString())
+//             return assert.strictEqual(err.reason, "no more unused wining ticket");
+//         }
+//         throw `It should throw error "no more unused wining ticket" but actually it does not`
+//     })
+// })

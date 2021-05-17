@@ -143,7 +143,6 @@ contract("Test (create) auction", accounts => {
         // amatch.futureBlock,
         // amatch.winningCount, 
         // amatch.maxWinning,
-        // amatch.randomUpperbound
         let expectedMatchData = [
             Tony,
             '10',
