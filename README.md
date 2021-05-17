@@ -52,6 +52,16 @@ Make sure that every test works before investigating contract details
 
 Design:
 
+Files:
+
+``Auction.sol``: Main contract
+
+``Helper.sol``: Contract for testing purpose
+
+``BAM_TOKEN.sol``, ``USDC_TOKEN.sol``: Token contracts (ERC20)
+
+``Migration.sol``: Truffle generated contract
+
 2 main actors:
 
 - Creator: Creator has token (e.g BAM) for sales but he needs random sale => so he deposit his BAM into contract and have it to choose random candidate (let's say player) to win BAM
@@ -86,3 +96,7 @@ Scenario:
 - Players can join a match, may be eligible to call to publish_lottery_result; for winning tickets, players are rewarded with new token, for losing ticket, usdc tokens returned. Thus, win or lose does not cost, only gas fee required
 Util all winning tickets revealed, no one can withdraw **except for creators can withdraw his usdc** from contract.
 Player can withdraw reward tokens and/or deposited token of their choice.
+
+## Acknowledgement:
+
+This repository uses contracts (ERC20) and derives safemMath library from https://openzeppelin.com/contracts/
