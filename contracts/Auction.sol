@@ -23,6 +23,8 @@ contract Auction {
 
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
+
+    uint constant MAX_UINT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
     
     // usdc address (erc20)
     address USDC_ADDRESS;
@@ -42,10 +44,12 @@ contract Auction {
         uint96  ticketReward;
         address tokenContractAddress; // 20 bytes
         uint96  ticketPrice;
-        uint64  expiryDate;
-        uint128 futureBlock;
-        uint32  winningCount; 
+        uint96  expiryBlock;
+        uint96  futureBlock;
+        uint32  winningCount;
         uint32  maxWinning;
+        // a player's ticket count cannot be more than capPerAddress
+        uint    capPerAddress;
     }
     
     // state data
@@ -75,7 +79,7 @@ contract Auction {
     
     modifier matchFinished(string memory matchId){
         Match memory amatch = matches[matchId];
-        require(amatch.creatorAddress != ADDRESS_NULL && amatch.expiryDate < block.timestamp, "invalid match or match is not closed yet");
+        require(amatch.creatorAddress != ADDRESS_NULL && amatch.expiryBlock < block.number, "invalid match or match is not closed yet");
         // if no more candidate player in list or winningCount reached
         require (playerList[matchId].length == 0 || amatch.winningCount >= amatch.maxWinning, "match is not finished");
         _;
@@ -110,9 +114,9 @@ contract Auction {
     
     // functions
     function auction(
-        string memory matchId, uint64 expiryDate, uint128 futureBlock, 
+        string memory matchId, uint96 expiryBlock, uint96 futureBlock, 
         uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, 
-        address tokenContractAddress
+        address tokenContractAddress, uint capPerAddress
     ) public payable {
         // use SafeMath (not safeMoon T,T)
         address creatorAddress = msg.sender;
@@ -121,12 +125,14 @@ contract Auction {
         // check occupied slot 
         require(matches[matchId].creatorAddress == ADDRESS_NULL, "matches with given matchId is occupied");
         // check expiryDate ( >= now)
-        require(expiryDate > block.timestamp && futureBlock > block.number, "expiry date or block must be in the future");
+        require(expiryBlock > block.number && futureBlock > expiryBlock, "expiryBlock should be greater than current chain length");
         // check rewardPerTicket
         require(ticketReward > 0 && ticketPrice > 0, "ticket price and reward must be greater than 0");
         // check amount == rewardPerTicket * maxWinningTicket
         require(maxWinning > 0 , "maxWinningTicket must be greater than 0");
         
+        if (capPerAddress == 0) { capPerAddress = MAX_UINT; }
+
         uint128 totalReward = maxWinning * ticketReward;
         // transfer token to this contract 
         bool success = ERC20(tokenContractAddress).transferFrom(payable(msg.sender), address(this), totalReward);
@@ -138,8 +144,9 @@ contract Auction {
             ticketReward, 
             tokenContractAddress, 
             ticketPrice, 
-            expiryDate, futureBlock, 
-            0, maxWinning 
+            expiryBlock, expiryBlock, 
+            0, maxWinning,
+            capPerAddress
         ); // estimate gas: 4*23000 -> 5*23000
         
         // emit creating auction event
@@ -149,7 +156,7 @@ contract Auction {
     function deposit(string memory matchId, uint amount) public payable validMatch(matchId) {
         
         // check opening state
-        require(matches[matchId].expiryDate > block.timestamp, "match is not opened to deposit");
+        require(matches[matchId].expiryBlock <= block.number, "match is not opened to deposit");
         
         // to prevent overflow, should limit upper_bound for amount
         uint128 _amount = uint128(amount);
@@ -161,17 +168,21 @@ contract Auction {
         require(_amount % ticketPrice == 0, "deposit amount should be divisible by ticket price");
         
         uint128 ticketCount = _amount / ticketPrice;
-        uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
 
+        uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
+        uint128 nextCount = currentCount.add(ticketCount);
+
+        // prevent player from deposit large number of ticket
+        require(nextCount <= matches[matchId].capPerAddress, "Number of ticket exceeds cap");
 
         if (currentCount == 0) {
             // create new slot for new player 
-            playerData[matchId][playerAddress] = Player(ticketCount, 0);
+            playerData[matchId][playerAddress] = Player(nextCount, 0);
             playerList[matchId].push(playerAddress);
         }
         else {
             // just increase ticket count
-            playerData[matchId][playerAddress].ticketCount = currentCount.add(ticketCount);
+            playerData[matchId][playerAddress].ticketCount = nextCount;
         }
 
         bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
@@ -187,12 +198,12 @@ contract Auction {
 
         Match memory amatch = matches[matchId];
         // check if match closed
-        require(amatch.expiryDate < block.timestamp, "match is not closed");
+        require(amatch.expiryBlock > block.number, "match is not closed");
         // check if max wining reached
         require(amatch.winningCount < amatch.maxWinning, "max wining reached");
         
     	uint futureBlock = amatch.futureBlock;
-        require(futureBlock < block.number, "future block has not been generated");
+        require(futureBlock <= block.number, "future block has not been generated");
         
         // get random between 0 and randomUpperbound
         uint playerListLength = playerList[matchId].length;
@@ -283,17 +294,18 @@ contract Auction {
         return (player.ticketCount, player.winningCount);
     }
 
-    function get_match(string memory matchId) public validMatch(matchId) view returns (address, uint96, address, uint96, uint64, uint128, uint32, uint32) {
+    function get_match(string memory matchId) public validMatch(matchId) view returns (address, uint96, address, uint96, uint96, uint96, uint32, uint32, uint) {
         Match memory amatch = matches[matchId];
         return (
             amatch.creatorAddress,
             amatch.ticketReward,
             amatch.tokenContractAddress, 
             amatch.ticketPrice,
-            amatch.expiryDate,
+            amatch.expiryBlock,
             amatch.futureBlock,
             amatch.winningCount, 
-            amatch.maxWinning
+            amatch.maxWinning,
+            amatch.capPerAddress
         );
     }
 
