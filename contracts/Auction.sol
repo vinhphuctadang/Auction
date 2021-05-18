@@ -96,7 +96,7 @@ contract Auction {
         require(amatch.expiryBlock < block.number, "match is not closed");  
         require(amatch.futureBlock <= block.number, "future block has not been generated");
         // cannot publish any more
-        require(currentRandomSeed[matchId] > 0 || block.number - amatch.futureBlock <= 256, "match is finished");
+        require(currentRandomSeed[matchId] > 0 || block.number - amatch.futureBlock <= 255, "match is finished");
         // check if max wining reached
         require(publishCount <=  amatch.maxWinning && amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
         // get random between 0 and randomUpperbound
