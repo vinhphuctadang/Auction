@@ -452,3 +452,151 @@ contract("Test creator with draw deposit token", accounts =>{
         throw `It should throw error "no more unused wining ticket" but actually it does not`
     })
 })
+
+contract("Test withdrawal after 256 blocks having no call to publish_result", accounts =>{
+    let Tony = accounts[0], 
+        Thor = accounts[1], 
+        Steve = accounts[2],
+        Banner = accounts[3],
+        Natasha = accounts[4];
+
+    let auctionContract, 
+        usdcContract, 
+        bamContract,
+        helperContract;
+    
+    let depositAmount = {
+        [Steve]: 10,
+        [Banner]: 5, 
+        [Tony]: 5,
+    }
+    let addressToName = {
+        [Tony]: 'tony',
+        [Thor]: 'thor',
+        [Steve]: 'steve',
+        [Banner]: 'banner',
+        [Natasha]: 'natasha'
+    }
+
+    const bamReward = 10
+    const ticketPrice = 5
+    let expiryBlock, futureBlock;
+
+    let winnerAddress
+
+    it("should properly deploy contracts", async()=> {
+        // require 4 contracts to be deployed 
+        // create helper contract
+        helperContract = await Helper.new({from: Tony})
+
+        // create usdc contract 
+        usdcContract = await USDC_TOKEN.new({from: Tony})
+        logger.debug("usdcAddr:", usdcContract.address);
+        assert(usdcContract.address != "", "USDC address is null")
+        
+        // create bam contract
+        bamContract  = await  BAM_TOKEN.new({from: Tony})
+        logger.debug("bamAddr:", bamContract.address)
+        assert(bamContract.address != "", "BAM address is null");
+
+        // create auction contract
+        auctionContract = await Auction.new(usdcContract.address, {from: Tony})
+        logger.debug("auctionContract:", auctionContract.address);
+        assert(auctionContract.address != "", "Auction address is null");
+
+        // transfer money
+        // we believe ERC20 transfer method !
+        await usdcContract.transfer(Banner,  "1000", {from: Tony});
+        await usdcContract.transfer(Steve, "1200", {from: Tony});
+        await bamContract.transfer(Thor, "1200", {from: Tony});
+    })
+
+    it("should successfully create a valid match with 100 BAM deposited", async()=>{
+        // Thor creates aution first
+        let tx
+        // Thor approve bam token
+        tx = await bamContract.approve(auctionContract.address, 100, { from: Thor });
+        let blockCount = parseInt(await helperContract.get_block_count({from: Thor}))
+        
+        expiryBlock = blockCount + 10
+        futureBlock = blockCount + 20
+        logger.debug("thor balance approval tx log:", tx.logs);
+        timeMarker = parseInt(Date.now() / 1000)
+        // Thor create a match
+        tx = await auctionContract.auction("thorMatch", expiryBlock, futureBlock, 10, ticketPrice, bamReward, bamContract.address, 0, {from : Thor});
+        logger.debug(tx.logs[0].args);
+    })
+    
+    it("should let everyone deposit there money", async()=>{
+        let tx
+        // everyone depsoit
+        for(let player in depositAmount) {
+            let amount = depositAmount[player]
+            logger.info(`${addressToName[player]} starts deposit amount of ${amount}, playerAddress=${player}`)
+            
+            await usdcContract.approve(auctionContract.address, amount, { from: player });
+            tx = await auctionContract.deposit("thorMatch", amount, {from: player});
+
+            // get player to check again
+            player = await auctionContract.get_player("thorMatch", player, { from: player });
+            assert.strictEqual(player[0].toString(), parseInt(amount / ticketPrice).toString())
+            assert.strictEqual(player[1].toString(), '0')
+        }
+    })
+
+    it("should generate future block and 256 blocks and say match is finished when call to publish lottery", async()=>{
+        await utils.generateBlock(helperContract, futureBlock + 256);
+        try {
+            tx = await auctionContract.publish_lottery_result("thorMatch", { from: Steve }); 
+        }
+        catch(err) {
+            logger.error(err.toString())
+            return assert.strictEqual(err.reason, "match is finished");
+        }
+        throw `It should throw errors "max wining reached" but actually it does not`
+    })
+
+    it("should let creator withdraw 100 BAM token", async()=>{
+        let previousBAM = (await bamContract.balanceOf(Thor)).toNumber()
+        let tx = await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
+        logger.debug("creator_withdraw_deposit tx gas used:", tx.receipt.gasUsed);
+        let currentBAM = (await bamContract.balanceOf(Thor)).toNumber()
+
+        assert.strictEqual(currentBAM - previousBAM, 100);
+
+        // get and see winning tickets == max ticket
+        let amatch = await auctionContract.get_match("thorMatch")
+        let winningCount = amatch['6'].toString()
+        let maxWining    = amatch['7'].toString()
+        assert.strictEqual(winningCount == maxWining, true, `WinningCount and maxWining are not equals: winningCount:${winningCount}, maxWining: ${maxWining}`);
+    })
+
+    it("should allow player to withdraw usdc and verify balances of all players", async()=>{
+        for(let playerAddress in depositAmount) {
+            // get current player tickets
+            let player = await auctionContract.get_player("thorMatch", playerAddress)
+            let previousTotalTicket = player[0].toNumber()
+            let previousWinningCount = player[1].toNumber()
+            let previousPlayerUsdc = (await usdcContract.balanceOf(playerAddress)).toNumber()
+
+            let tx = await auctionContract.player_withdraw_deposit("thorMatch", { from: playerAddress })
+            logger.debug("player_withdraw_deposit tx gas used:", tx.receipt.gasUsed);
+
+            player = await auctionContract.get_player("thorMatch", playerAddress)
+            let currentTotalTicket = player[0].toNumber()
+            let currentWinningCount = player[1].toNumber()
+            let currentPlayerUsdc = (await usdcContract.balanceOf(playerAddress)).toNumber()
+            
+            // money in wallet first
+            assert.strictEqual(currentPlayerUsdc - previousPlayerUsdc, (previousTotalTicket - currentTotalTicket) * ticketPrice,
+                `previousPlayerUsdc: ${previousPlayerUsdc}, currentPlayerUsdc ${currentPlayerUsdc}`)
+            // no changes in creator balance
+            // check in contract
+            assert.strictEqual(previousWinningCount, 0)
+            assert.strictEqual(currentWinningCount, previousWinningCount)
+            assert.strictEqual(currentTotalTicket, previousWinningCount, 
+                `player ${addressToName[playerAddress]} have current ticket of ${currentTotalTicket}, previous: ${previousTotalTicket}, expected: ${previousWinningCount},
+                but the fact is ${currentTotalTicket - previousTotalTicket}`)
+        }
+    })
+})

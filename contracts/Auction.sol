@@ -90,13 +90,13 @@ contract Auction {
     }
 
     modifier canPublishResult(string memory matchId, uint publishCount) {
-        require(publishCount <= MAX_PUBLISH_PER_CALL && publishCount > 0, "publishCount must be at least 1 and not exceeds 16");
+        require(publishCount <= MAX_PUBLISH_PER_CALL && publishCount > 0, "publishCount is out of range");
         Match memory amatch = matches[matchId];
         // check if match closed
         require(amatch.expiryBlock < block.number, "match is not closed");  
         require(amatch.futureBlock <= block.number, "future block has not been generated");
         // cannot publish any more
-        require(currentRandomSeed[matchId] > 0 || block.number - amatch.futureBlock <= 256, "block hash cannot be accessed any more, match finished");
+        require(currentRandomSeed[matchId] > 0 || block.number - amatch.futureBlock <= 256, "match is finished");
         // check if max wining reached
         require(publishCount <=  amatch.maxWinning && amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
         // get random between 0 and randomUpperbound

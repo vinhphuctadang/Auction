@@ -16,4 +16,6 @@ contract Helper {
 
     // get current block count
     function get_block_count() public view returns(uint) { return block.number; }
+
+    function get_block_hash(uint blockNumber) public view returns(bytes32) { return blockhash(blockNumber - 1); }
 }
