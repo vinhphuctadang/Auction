@@ -204,7 +204,6 @@ contract Auction {
         address winnerAddress = playerList[matchId][nextWinner];
         // increase number of winning ticket to player
         playerData[matchId][winnerAddress].winningCount ++;
-        matches[matchId].winningCount ++;
 
         // increase usdc balance of creator
         creatorBalance[creatorAddress] += matches[matchId].ticketPrice;
@@ -245,7 +244,8 @@ contract Auction {
 
         uint    nextWinner = uint(randomSeed) % playerListLength;
         (address winnerAddress, ) = process_winner(matchId, nextWinner, creatorAddress, playerListLength);
-
+        // increase winning count of the match
+        matches[matchId].winningCount ++;
         // rehash and save randomSeed for next random 
         currentRandomSeed[matchId] = keccak256(abi.encodePacked(randomSeed));
         // emit event
@@ -277,6 +277,8 @@ contract Auction {
             randomSeed = keccak256(abi.encodePacked(randomSeed));
         }
 
+        // add to winning count
+        matches[matchId].winningCount += uint32(index);
         // store the random seed for next random
         currentRandomSeed[matchId] = randomSeed;
 

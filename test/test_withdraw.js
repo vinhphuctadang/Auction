@@ -1,5 +1,6 @@
 const assert = require("assert")
 const logger = require("./logger")
+const utils = require("./utils")
 const Auction = artifacts.require("Auction")
 const USDC_TOKEN = artifacts.require("USDC_TOKEN")
 const BAM_TOKEN = artifacts.require("BAM_TOKEN")
@@ -11,15 +12,6 @@ async function sleep(ms){
 			resolve()
 		}, ms)
 	})
-}
-
-async function generateBlocks(helperContract, expectedFutureBlock){
-    let blockCount = parseInt(await helperContract.get_block_count())
-    for(let i = blockCount; i <= expectedFutureBlock; ++i) {
-        logger.info(`Creating block ${i+1}, target: >${expectedFutureBlock} ...`)
-        // generate (expectedFutureBlock - blockCount + 1) blocks (to when future block created)
-        await helperContract.dummy_assign()
-    }
 }
 
 contract("Test withdraw reward token", accounts => {
@@ -49,7 +41,7 @@ contract("Test withdraw reward token", accounts => {
 
     const bamReward = 10
     const ticketPrice = 5
-    let expectedFutureBlock
+    let expiryBlock, futureBlock
 
     let winnerAddress
 
@@ -86,13 +78,14 @@ contract("Test withdraw reward token", accounts => {
         // Thor approve bam token
         tx = await bamContract.approve(auctionContract.address,  20, { from: Thor });
         let blockCount = parseInt(await helperContract.get_block_count({from: Thor}))
-        expectedFutureBlock = blockCount + 20
+        expiryBlock = blockCount + 10
+        futureBlock = blockCount + 20
 
         logger.debug("thor balance approval tx log:", tx.logs);
 
         timeMarker = parseInt(Date.now() / 1000)
         // Thor create a match
-        tx = await auctionContract.auction("thorMatch", timeMarker + 10, expectedFutureBlock, 2, ticketPrice, bamReward, bamContract.address, {from : Thor});
+        tx = await auctionContract.auction("thorMatch", expiryBlock, futureBlock, 2, ticketPrice, bamReward, bamContract.address, 10, {from : Thor});
         logger.debug(tx.logs[0].args);
     })
 
@@ -127,18 +120,9 @@ contract("Test withdraw reward token", accounts => {
 
     it("should deny withdraw when match is not finished (all result are not revealed)", async()=>{
         let tx
-        // lets wait for 10 seconds 
-        let sleepTime = 12
-        logger.info(`Wait ${sleepTime}s for thorMatch match to close`);
-        await sleep(sleepTime * 1000)
+        await utils.generateBlock(helperContract, futureBlock + 1)
 
-        let blockCount = parseInt(await helperContract.get_block_count({from: Thor}))
-        for(let i = blockCount; i <= expectedFutureBlock; ++i) {
-            logger.info(`Creating block ${i+1}, target: >${expectedFutureBlock} ...`)
-            // generate (expectedFutureBlock - blockCount + 1) blocks (to when future block created)
-            await helperContract.dummy_assign()
-        }
-
+        // publish result
         tx = await auctionContract.publish_lottery_result("thorMatch", {from: Natasha})
         logger.debug("publish_lottery_result tx gas used:", tx.receipt.gasUsed);
         winnerAddress = tx.logs[0].args[1]
@@ -306,7 +290,7 @@ contract("Test creator with draw deposit token", accounts =>{
 
     const bamReward = 10
     const ticketPrice = 5
-    let expectedFutureBlock
+    let expiryBlock, futureBlock;
 
     let winnerAddress
 
@@ -343,13 +327,13 @@ contract("Test creator with draw deposit token", accounts =>{
         // Thor approve bam token
         tx = await bamContract.approve(auctionContract.address, 100, { from: Thor });
         let blockCount = parseInt(await helperContract.get_block_count({from: Thor}))
-        expectedFutureBlock = blockCount + 20
-
+        
+        expiryBlock = blockCount + 10
+        futureBlock = blockCount + 50
         logger.debug("thor balance approval tx log:", tx.logs);
-
         timeMarker = parseInt(Date.now() / 1000)
         // Thor create a match
-        tx = await auctionContract.auction("thorMatch", timeMarker + 10, expectedFutureBlock, 10, ticketPrice, bamReward, bamContract.address, {from : Thor});
+        tx = await auctionContract.auction("thorMatch", expiryBlock, futureBlock, 10, ticketPrice, bamReward, bamContract.address, 0, {from : Thor});
         logger.debug(tx.logs[0].args);
     })
 
@@ -382,11 +366,7 @@ contract("Test creator with draw deposit token", accounts =>{
         }
 
 
-        // lets wait for 10 seconds 
-        let sleepTime = 12
-        logger.info(`Wait ${sleepTime}s for thorMatch match to close`);
-        await sleep(sleepTime * 1000)
-
+        await utils.generateBlock(helperContract, futureBlock + 1)
         // try withdraw
         try {
             await auctionContract.creator_withdraw_deposit("thorMatch", {from: Thor})
@@ -399,9 +379,6 @@ contract("Test creator with draw deposit token", accounts =>{
     })
 
     it("should publish 2 players, but max ticket count is 4", async()=>{
-        // generate blocks
-        await generateBlocks(helperContract, expectedFutureBlock);
-
         // publish winning tickets
         let tx, winnerAddress
 
