@@ -24,7 +24,8 @@ contract Auction {
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
 
-    uint constant MAX_UINT = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint constant MAX_UINT   = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint constant MAX_PLAYER = 0xffffffff;
     
     // usdc address (erc20)
     address USDC_ADDRESS;
@@ -52,7 +53,8 @@ contract Auction {
         uint    capPerAddress;
     }
     
-    // state data
+    // state datas
+    mapping(string => bytes32) currentRandomSeed;
     // creator balance in usdc, address -> amount of money
     mapping(address => uint) creatorBalance;
     // match id -> Match
@@ -63,7 +65,6 @@ contract Auction {
     mapping(string => address[]) playerList;
 
     // address
-
     address admin;
 
     modifier creatorOnly(string memory matchId) {
@@ -85,25 +86,28 @@ contract Auction {
         _;
     }
 
+    modifier canPublishResult(string memory matchId, uint publishCount) {
+
+        require(publishCount <= 16 && publishCount > 0, "publishCount must be at least 1 and not exceed 16");
+
+        Match memory amatch = matches[matchId];
+        // check if match closed
+        require(amatch.expiryBlock > block.number, "match is not closed");  
+        require(amatch.futureBlock <= block.number, "future block has not been generated");
+        
+        // check if max wining reached
+        require(amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
+        // get random between 0 and randomUpperbound
+        require(playerList[matchId].length > 0, "player list length should be greater than 0");
+        _;
+    }
+
     // events
     event CreateAuctionEvent(string matchId, address auctionCreator, uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, address tokenContractAddress);
     event DepositEvent(string matchId, address player, uint128 depositAmount, uint128 ticketCount);
-    event PublishedEvent(string matchId, address winner, uint winningOrder);
-    
-    // util function 
-    // lower_bound = 0
-    function random(uint upper_bound, uint blockNumber) private view returns(uint) {
-        require(upper_bound > 0, "upper_bound must be greater than 0");
-        require(blockNumber > 0, "blockNumber must be greater than 0");
-        
-        if (upper_bound == 1) {
-            // early return to eliminate gas used
-            return 0;
-        }
-        // random number = futureBlock + blop
-        return uint(keccak256(abi.encodePacked(blockhash(blockNumber - 1), blockhash(block.number - 1), block.timestamp))) % upper_bound;
-    }
-    
+    event PublishedEvent(string matchId, address winner);
+    event BatchPublishedEvent(string matchId, address[] winners, uint count);
+
     constructor(address usdcContractAddress) { 
         // wrong address will results in deposit failure 
         USDC_ADDRESS = usdcContractAddress; 
@@ -176,6 +180,7 @@ contract Auction {
         require(nextCount <= matches[matchId].capPerAddress, "Number of ticket exceeds cap");
 
         if (currentCount == 0) {
+            require(playerList[matchId].length < MAX_PLAYER, "Player limit exceeds");
             // create new slot for new player 
             playerData[matchId][playerAddress] = Player(nextCount, 0);
             playerList[matchId].push(playerAddress);
@@ -192,46 +197,91 @@ contract Auction {
         emit DepositEvent(matchId, playerAddress, _amount, ticketCount);
     }
 
-    // // call this function to publish lottery result
-    // if not enough winining ticket published, no one can withdraw money => people are incentivize to invoke this function
-    function publish_lottery_result(string memory matchId) public validMatch(matchId) returns(address) { // 3 storage change at most
-
-        Match memory amatch = matches[matchId];
-        // check if match closed
-        require(amatch.expiryBlock > block.number, "match is not closed");
-        // check if max wining reached
-        require(amatch.winningCount < amatch.maxWinning, "max wining reached");
-        
-    	uint futureBlock = amatch.futureBlock;
-        require(futureBlock <= block.number, "future block has not been generated");
-        
-        // get random between 0 and randomUpperbound
-        uint playerListLength = playerList[matchId].length;
-        require(playerListLength > 0, "player list length should be greater than 0");
-        
-        // get next winner
-        uint    nextWinner = random(playerListLength, futureBlock);
+    function process_winner(string memory matchId, uint nextWinner, address creatorAddress, uint playerListLength) private returns(address, uint){
         address winnerAddress = playerList[matchId][nextWinner];
-
         // increase number of winning ticket to player
         playerData[matchId][winnerAddress].winningCount ++;
         matches[matchId].winningCount ++;
+
         // increase usdc balance of creator
-        creatorBalance[amatch.creatorAddress] += amatch.ticketPrice;
-        
+        creatorBalance[creatorAddress] += matches[matchId].ticketPrice;
+
         // if winning ticket reach his max, swap to end in order not to being randomed again
         Player memory player = playerData[matchId][winnerAddress]; // load into memory once to save gas
 
         if (player.ticketCount == player.winningCount) {
             // swap address and decrease randomUpperbound
-            // swap current person to the last slot 
-            playerList[matchId][nextWinner] = playerList[matchId][playerListLength-1];
+            // swap current person to the last slot
+            playerList[matchId][nextWinner] = playerList[matchId][playerListLength - 1];
             // not consider the last person any more, because he wins all his ticket
-            playerList[matchId].pop(); 
+            playerList[matchId].pop();
+            playerListLength --;
         }
 
-    	emit PublishedEvent(matchId, winnerAddress, amatch.winningCount + 1);
-        return winnerAddress;
+        // return both winner and remaining number of player
+        return (winnerAddress, playerListLength);
+    }
+
+    // // call this function to publish lottery result
+    // if not enough winining ticket published, no one can withdraw money => people are incentivize to invoke this function
+    function publish_lottery_result(string memory matchId) public validMatch(matchId) canPublishResult(matchId, 1) { 
+        // 6 storage change at most
+
+        // read 3 uint from storage
+        uint    futureBlock    = matches[matchId].futureBlock;
+        address creatorAddress = matches[matchId].creatorAddress;
+        uint    playerListLength = playerList[matchId].length;
+
+        // 4 storage change on average
+
+        // the randomSeed will be different even in the same block, thanks to keccak
+        bytes32 randomSeed = currentRandomSeed[matchId];
+        if (randomSeed == 0) {
+            randomSeed = keccak256(abi.encodePacked(blockhash(futureBlock - 1)));
+        }
+
+        uint    nextWinner = uint(randomSeed) % playerListLength;
+        (address winnerAddress, ) = process_winner(matchId, nextWinner, creatorAddress, playerListLength);
+
+        // rehash and save randomSeed for next random 
+        currentRandomSeed[matchId] = keccak256(abi.encodePacked(randomSeed));
+        // emit event
+    	emit PublishedEvent(matchId, winnerAddress);
+    }
+
+    function publish_lottery_result(string memory matchId, uint32 count) public validMatch(matchId) canPublishResult(matchId, count) { 
+        // read 3 uint from storage
+        uint    futureBlock      = matches[matchId].futureBlock;
+        address creatorAddress   = matches[matchId].creatorAddress;
+        uint    playerListLength = playerList[matchId].length;
+
+        // get random seed
+        bytes32   randomSeed     = currentRandomSeed[matchId];
+        if (randomSeed == 0) {
+            randomSeed = keccak256(abi.encodePacked(blockhash(futureBlock - 1)));
+        }
+
+        address[] memory winners = new address[](count);
+        uint index;
+
+        for(index = 0; index < count; ++index) {
+            uint nextWinner = uint(randomSeed) % playerListLength;
+            (address winnerAddress, uint tmpLen) = process_winner(matchId, nextWinner, creatorAddress, playerListLength);
+            if (tmpLen == 0) {
+                break;
+            }
+            playerListLength = tmpLen;
+            // store result
+            winners[index]   = winnerAddress;
+            // update random seed (in memory)
+            randomSeed = keccak256(abi.encodePacked(randomSeed));
+        }
+
+        // store the random seed for next random
+        currentRandomSeed[matchId] = randomSeed;
+
+        // emit event
+        emit BatchPublishedEvent(matchId, winners, index + 1);
     }
 
     // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
@@ -316,41 +366,4 @@ contract Auction {
     function get_player_count(string memory matchId) public view returns(uint) {
         return playerList[matchId].length;
     }
-
-    // ------------------------------------------
-    // functions only for testing purpose
-    // CAUTION: PLEASE delete this on deployment
-    // ------------------------------------------
-    // function fake_publish_lottery_result(string memory matchId, uint nextWinner) public validMatch(matchId) returns(address) { // 3 storage change at most
-    //     require(admin == msg.sender, "Only admin can do this");
-
-    //     require(matches[matchId].expiryDate < block.timestamp, "Match is not closed");
-        
-    // 	uint futureBlock = matches[matchId].futureBlock;
-    //     require(futureBlock < block.number, "future block has not been generated");
-        
-    //     // get random between 0 and randomUpperbound
-    //     uint upperBound = matches[matchId].randomUpperbound;
-    //     require(upperBound > 0, "random upper bound should be greater than 0");
-        
-    //     // get next winner
-    //     // uint    nextWinner = random(upperBound, futureBlock);
-    //     address winnerAddress = playerList[matchId][nextWinner];
-    //     // increase number of winning ticket 
-    //     playerData[matchId][winnerAddress].winningCount ++;
-        
-    //     // if winning ticket reach his max, swap to end in order not to being randomed again
-    //     Player memory player = playerData[matchId][winnerAddress]; // load into memory once to save gas
-
-    //     if (player.ticketCount == player.winningCount) {
-    //         // swap address and decrease randomUpperbound
-    //         // swap current person to the last slot 
-    //         (playerList[matchId][nextWinner],  playerList[matchId][upperBound-1]) = (playerList[matchId][upperBound-1],  playerList[matchId][nextWinner]);
-    //         // not consider the last person any more, because he wins all his ticket
-    //         matches[matchId].randomUpperbound --; 
-    //     }
-    // 	emit PublishedEvent(matchId, winnerAddress, matches[matchId].winningCount);
-    //     return winnerAddress;
-    // }
-    // ---------------------------------------------------------
 }
