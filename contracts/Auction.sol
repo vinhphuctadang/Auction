@@ -24,8 +24,9 @@ contract Auction {
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
 
-    uint constant MAX_UINT   = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    uint constant MAX_PLAYER = 0xffffffff;
+    uint constant MAX_UINT             = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint constant MAX_PLAYER           = 0xffffffff;
+    uint constant MAX_PUBLISH_PER_CALL = 16; 
     
     // usdc address (erc20)
     address USDC_ADDRESS;
@@ -81,18 +82,21 @@ contract Auction {
     modifier matchFinished(string memory matchId){
         Match memory amatch = matches[matchId];
         require(amatch.creatorAddress != ADDRESS_NULL && amatch.futureBlock < block.number, "invalid match or match is not closed yet");
+
+        bool randomSeedNotSet = currentRandomSeed[matchId] == 0 && (block.number - amatch.futureBlock > 255);
         // if no more candidate player in list or winningCount reached
-        require (playerList[matchId].length == 0 || amatch.winningCount >= amatch.maxWinning, "match is not finished");
+        require (playerList[matchId].length == 0 || amatch.winningCount >= amatch.maxWinning || randomSeedNotSet, "match is not finished");
         _;
     }
 
     modifier canPublishResult(string memory matchId, uint publishCount) {
-        require(publishCount <= 16 && publishCount > 0, "publishCount must be at least 1 and not exceeds 16");
+        require(publishCount <= MAX_PUBLISH_PER_CALL && publishCount > 0, "publishCount must be at least 1 and not exceeds 16");
         Match memory amatch = matches[matchId];
         // check if match closed
         require(amatch.expiryBlock < block.number, "match is not closed");  
         require(amatch.futureBlock <= block.number, "future block has not been generated");
-        // require(currentRandomSeed[matchId] > 0 || amatch.futureBlock - block.number <= 255, "block hash cannot be accessed any more");
+        // cannot publish any more
+        require(currentRandomSeed[matchId] > 0 || block.number - amatch.futureBlock <= 256, "block hash cannot be accessed any more, match finished");
         // check if max wining reached
         require(publishCount <=  amatch.maxWinning && amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
         // get random between 0 and randomUpperbound
