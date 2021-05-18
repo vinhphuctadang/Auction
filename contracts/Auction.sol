@@ -227,24 +227,26 @@ contract Auction {
         // return both winner and remaining number of player
         return (winnerAddress, playerListLength);
     }
+    
+
+    function get_randomseed(string memory matchId, uint futureBlock) private returns(bytes32){
+        bytes32 randomSeed = currentRandomSeed[matchId];
+        if (randomSeed == 0) {
+            randomSeed = keccak256(abi.encodePacked(blockhash(futureBlock - 1)));
+        }
+        return randomSeed;
+    }
 
     // // call this function to publish lottery result
     // if not enough winining ticket published, no one can withdraw money => people are incentivize to invoke this function
     function publish_lottery_result(string memory matchId) public validMatch(matchId) canPublishResult(matchId, 1) { 
         // 6 storage change at most
 
-        // read 3 uint from storage
-        uint    futureBlock    = matches[matchId].futureBlock;
+        // read 4 uint from storage
         address creatorAddress = matches[matchId].creatorAddress;
         uint    playerListLength = playerList[matchId].length;
-
-        // 4 storage change on average
-
         // the randomSeed will be different even in the same block, thanks to keccak
-        bytes32 randomSeed = currentRandomSeed[matchId];
-        if (randomSeed == 0) {
-            randomSeed = keccak256(abi.encodePacked(blockhash(futureBlock - 1)));
-        }
+        bytes32 randomSeed = get_randomseed(matchId, matches[matchId].futureBlock);
 
         uint    nextWinner = uint(randomSeed) % playerListLength;
         (address winnerAddress, ) = process_winner(matchId, nextWinner, creatorAddress, playerListLength);
@@ -257,16 +259,11 @@ contract Auction {
     }
 
     function publish_lottery_result_batch(string memory matchId, uint32 count) public validMatch(matchId) canPublishResult(matchId, count) { 
-        // read 3 uint from storage
-        uint    futureBlock      = matches[matchId].futureBlock;
+        // read 4 uint from storage
         address creatorAddress   = matches[matchId].creatorAddress;
         uint    playerListLength = playerList[matchId].length;
-
         // get random seed
-        bytes32   randomSeed     = currentRandomSeed[matchId];
-        if (randomSeed == 0) {
-            randomSeed = keccak256(abi.encodePacked(blockhash(futureBlock - 1)));
-        }
+        bytes32 randomSeed = get_randomseed(matchId, matches[matchId].futureBlock);
 
         address[] memory winners = new address[](count);
         uint index;
