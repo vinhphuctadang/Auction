@@ -80,21 +80,18 @@ contract Auction {
     
     modifier matchFinished(string memory matchId){
         Match memory amatch = matches[matchId];
-        require(amatch.creatorAddress != ADDRESS_NULL && amatch.expiryBlock < block.number, "invalid match or match is not closed yet");
+        require(amatch.creatorAddress != ADDRESS_NULL && amatch.futureBlock < block.number, "invalid match or match is not closed yet");
         // if no more candidate player in list or winningCount reached
         require (playerList[matchId].length == 0 || amatch.winningCount >= amatch.maxWinning, "match is not finished");
         _;
     }
 
     modifier canPublishResult(string memory matchId, uint publishCount) {
-
         require(publishCount <= 16 && publishCount > 0, "publishCount must be at least 1 and not exceed 16");
-
         Match memory amatch = matches[matchId];
         // check if match closed
-        require(amatch.expiryBlock > block.number, "match is not closed");  
+        require(amatch.expiryBlock < block.number, "match is not closed");  
         require(amatch.futureBlock <= block.number, "future block has not been generated");
-        
         // check if max wining reached
         require(amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
         // get random between 0 and randomUpperbound
@@ -129,7 +126,7 @@ contract Auction {
         // check occupied slot 
         require(matches[matchId].creatorAddress == ADDRESS_NULL, "matches with given matchId is occupied");
         // check expiryDate ( >= now)
-        require(expiryBlock > block.number && futureBlock > expiryBlock, "expiryBlock should be greater than current chain length");
+        require(expiryBlock > block.number && futureBlock > expiryBlock, "future block > expiryBlock > current chain length");
         // check rewardPerTicket
         require(ticketReward > 0 && ticketPrice > 0, "ticket price and reward must be greater than 0");
         // check amount == rewardPerTicket * maxWinningTicket
@@ -148,7 +145,7 @@ contract Auction {
             ticketReward, 
             tokenContractAddress, 
             ticketPrice, 
-            expiryBlock, expiryBlock, 
+            expiryBlock, futureBlock, 
             0, maxWinning,
             capPerAddress
         ); // estimate gas: 4*23000 -> 5*23000
@@ -181,6 +178,7 @@ contract Auction {
 
         if (currentCount == 0) {
             require(playerList[matchId].length < MAX_PLAYER, "Player limit exceeds");
+
             // create new slot for new player 
             playerData[matchId][playerAddress] = Player(nextCount, 0);
             playerList[matchId].push(playerAddress);
@@ -197,6 +195,8 @@ contract Auction {
         emit DepositEvent(matchId, playerAddress, _amount, ticketCount);
     }
 
+    // increase wining ticket of chosen user
+    // should be called from publish_lottery_result with modifier, all input should be valid before calling this function
     function process_winner(string memory matchId, uint nextWinner, address creatorAddress, uint playerListLength) private returns(address, uint){
         address winnerAddress = playerList[matchId][nextWinner];
         // increase number of winning ticket to player

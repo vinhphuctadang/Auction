@@ -464,3 +464,7 @@ contract("Test publish lottery result on number of ticket > number of lottery de
         throw `It should throw errors "player list length should be greater than 0" but actually it does not`
     })
 })
+
+contract("Test publish lottery result for batch publishing", async()=>{
+    
+})
