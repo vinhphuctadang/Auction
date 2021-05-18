@@ -19,7 +19,7 @@ async function sleep(ms){
 contract("Test deposit", accounts => {
     let Tony = accounts[0], Thor = accounts[1], Steve = accounts[2];
 
-    let timeMarker
+    let expiryBlock, futureBlock, capPerAddress = 6;
     let auctionContract, 
         usdcContract, 
         bamContract,
@@ -51,17 +51,20 @@ contract("Test deposit", accounts => {
         await usdcContract.transfer(Steve, "1200", {from: Tony});
     })
 
-    it("should create a match named thorMatch", async()=>{
+    it("should create a match named thorMatch and limit capacity per address = 6", async()=>{
         // Thor creates aution first
         let tx
         // Thor approve bam token
-        tx = await bamContract.approve(auctionContract.address,  100, { from: Thor });
+        tx = await bamContract.approve(auctionContract.address, 100, { from: Thor });
         let blockCount = parseInt(await helperContract.get_block_count({from: Thor}))
         logger.debug("thor balance approval tx gas used:", tx.receipt.gasUsed);
 
-        timeMarker = parseInt(Date.now() / 1000)
+        expiryBlock = blockCount + 30
+        futureBlock = blockCount + 60
+        
+        // timeMarker = parseInt(Date.now() / 1000)
         // Thor create a match
-        tx = await auctionContract.auction("thorMatch", timeMarker + 10, blockCount + 100, 10, 5, 10, bamContract.address, {from : Thor});
+        tx = await auctionContract.auction("thorMatch", expiryBlock, futureBlock, 10, 5, 10, bamContract.address, capPerAddress, {from : Thor});
         logger.debug("Transaction gas used:", tx.receipt.gasUsed);
         logger.debug(tx.logs[0].args);
     })
@@ -73,8 +76,9 @@ contract("Test deposit", accounts => {
         } 
         catch(err) {
             logger.error(err.toString())
-            assert.strictEqual(err.reason, "invalid match");
+            return assert.strictEqual(err.reason, "invalid match");
         }
+        throw `It should throw "invalid match" but actually it does not`
     })
 
     it("should not let desposit when amount is 0", async()=>{
@@ -86,34 +90,37 @@ contract("Test deposit", accounts => {
         }
         catch(err) {
             logger.error(err.toString())
-            assert.strictEqual(err.reason, "deposit amount must be greater than 0");
+            return assert.strictEqual(err.reason, "deposit amount must be greater than 0");
         }
+        throw `It should throw "deposit amount must be greater than 0" but actually it does not`
     })
 
     it("should not let deposit when amount is not divisible by ticket price, amount = 12, ticketprice = 5", async()=>{
-        // call to deposit
+        // call to deposit but amount is not divisible
         let tx
         try {
             tx = await auctionContract.deposit("thorMatch", 12, {from: Steve}); 
         } 
         catch(err) {
             logger.error(err.toString())
-            assert.strictEqual(err.reason, "deposit amount should be divisible by ticket price");
+            return assert.strictEqual(err.reason, "deposit amount should be divisible by ticket price");
         }
+        throw `It should throw "deposit amount should be divisible by ticket price" but actually it does not`
     })
 
     it("should not let deposit when allowance usdc is not enough", async()=>{
         let tx
         // approve 15 units
-        await usdcContract.approve(auctionContract.address,  15, { from: Steve });
+        await usdcContract.approve(auctionContract.address, 15, { from: Steve });
         // deposit 20 units
         try {
             tx = await auctionContract.deposit("thorMatch", 20, {from: Steve});
         }
         catch(err) {
             logger.error(err.toString())
-            assert.strictEqual(err.reason, "ERC20: transfer amount exceeds allowance")
+            return assert.strictEqual(err.reason, "ERC20: transfer amount exceeds allowance")
         }
+        throw `It should throw error "ERC20: transfer amount exceeds allowance" but actually it does not`
     })
 
     // TODO: should test not enough balance
@@ -144,7 +151,7 @@ contract("Test deposit", accounts => {
         let tx;
         await usdcContract.increaseAllowance(auctionContract.address,  10, { from: Steve });
         tx = await auctionContract.deposit("thorMatch", 10, {from: Steve}); 
-        logger.debug("Transaction gas used for deposit:", tx.receipt.gasUsed);
+        logger.debug("Transaction gas used for deposit 2nd time:", tx.receipt.gasUsed);
         utils.eventEquals(tx, "DepositEvent", {
             matchId: "thorMatch", 
             player: Steve, 
@@ -157,11 +164,70 @@ contract("Test deposit", accounts => {
         assert.strictEqual(tx['1'].toString(), '0'); // 0 winning 
     })
 
+    it("should let Tony deposit and get player should return 2", async() => {
+        let tx
+        // get number of player
+        tx = await auctionContract.get_player_count("thorMatch", {from: Steve});
+        assert.strictEqual(tx.toNumber(), 1)
+
+        // approve 15 units
+        await usdcContract.approve(auctionContract.address, 20, { from: Tony });
+        // deposit 20 units
+        let previousContractBalance = (await usdcContract.balanceOf(auctionContract.address)).toNumber()
+        tx = await auctionContract.deposit("thorMatch", 20, {from: Tony});
+        logger.debug("Transaction gas used for deposit:", tx.receipt.gasUsed);
+        let currentContractBalance = (await usdcContract.balanceOf(auctionContract.address)).toNumber()
+
+        utils.eventEquals(tx, "DepositEvent", {
+            matchId: "thorMatch", 
+            player: Tony, 
+            depositAmount: 20, 
+            ticketCount: 4
+        })
+        assert.strictEqual(currentContractBalance - previousContractBalance, 20)
+
+        tx = await auctionContract.get_player("thorMatch", Tony, {from: Steve});
+        assert.strictEqual(tx['0'].toString(), '4'); // 4 tickets
+        assert.strictEqual(tx['1'].toString(), '0'); // 0 winning
+
+        // check number of player
+        tx = await auctionContract.get_player_count("thorMatch", {from: Steve});
+        assert.strictEqual(tx.toNumber(), 2)
+    })
+
+    it("should not let Steve deposit for 2 more tickets", async()=>{
+        let tx;
+        await usdcContract.increaseAllowance(auctionContract.address, 10, { from: Steve });
+        try {
+            tx = await auctionContract.deposit("thorMatch", 10, {from: Steve}); 
+        }
+        catch(err) {
+            logger.error(err.toString());
+            assert.strictEqual(err.reason, "Number of ticket exceeds cap");
+            // also check for player information to make sure that it stays unchange
+            logger.info("Checking Steve data to make sure that it is unchanged")
+            tx = await auctionContract.get_player("thorMatch", Steve, {from: Steve});
+            assert.strictEqual(tx['0'].toString(), '5'); // 5 tickets
+            assert.strictEqual(tx['1'].toString(), '0'); // 0 winning 
+            return // all expected errors happened
+        }
+        throw `It should throw "Number of ticket exceeds cap" but actually it does not`
+    })
+
+    it("[try again] should let Steve deposit for 1 more tickets", async()=>{
+        let tx;
+        // we don't increase allowanace again
+        // await usdcContract.increaseAllowance(auctionContract.address, 10, { from: Steve });
+        tx = await auctionContract.deposit("thorMatch", 5, {from: Steve});
+        logger.info("Checking Steve data to make sure that it is increased")
+        tx = await auctionContract.get_player("thorMatch", Steve, {from: Steve});
+        assert.strictEqual(tx['0'].toString(), '6'); // 6 tickets
+        assert.strictEqual(tx['1'].toString(), '0'); // 0 winning 
+    })
+    
     it("should not let desposit to closed match", async()=>{
-        // we sleep  
-        let sleepTime = timeMarker + 12 - parseInt(Date.now()/1000)
-        logger.info(`Wait ${sleepTime}s for thorMatch match to close`);
-        if (sleepTime > 0) await sleep(sleepTime * 1000)
+        // generate
+        await utils.generateBlock(helperContract, expiryBlock + 1);
 
         // call to deposit
         let tx

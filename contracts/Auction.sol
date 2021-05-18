@@ -87,13 +87,14 @@ contract Auction {
     }
 
     modifier canPublishResult(string memory matchId, uint publishCount) {
-        require(publishCount <= 16 && publishCount > 0, "publishCount must be at least 1 and not exceed 16");
+        require(publishCount <= 16 && publishCount > 0, "publishCount must be at least 1 and not exceeds 16");
         Match memory amatch = matches[matchId];
         // check if match closed
         require(amatch.expiryBlock < block.number, "match is not closed");  
         require(amatch.futureBlock <= block.number, "future block has not been generated");
+        // require(currentRandomSeed[matchId] > 0 || amatch.futureBlock - block.number <= 255, "block hash cannot be accessed any more");
         // check if max wining reached
-        require(amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
+        require(publishCount <=  amatch.maxWinning && amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
         // get random between 0 and randomUpperbound
         require(playerList[matchId].length > 0, "player list length should be greater than 0");
         _;
@@ -102,8 +103,8 @@ contract Auction {
     // events
     event CreateAuctionEvent(string matchId, address auctionCreator, uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, address tokenContractAddress);
     event DepositEvent(string matchId, address player, uint128 depositAmount, uint128 ticketCount);
-    event PublishedEvent(string matchId, address winner);
-    event BatchPublishedEvent(string matchId, address[] winners, uint count);
+    event PublishEvent(string matchId, address winner);
+    event BatchPublishEvent(string matchId, address[] winners, uint count);
 
     constructor(address usdcContractAddress) { 
         // wrong address will results in deposit failure 
@@ -135,9 +136,6 @@ contract Auction {
         if (capPerAddress == 0) { capPerAddress = MAX_UINT; }
 
         uint128 totalReward = maxWinning * ticketReward;
-        // transfer token to this contract 
-        bool success = ERC20(tokenContractAddress).transferFrom(payable(msg.sender), address(this), totalReward);
-        require(success, "insufficient amount for reward");
         
         // store match
         matches[matchId] = Match(
@@ -149,6 +147,10 @@ contract Auction {
             0, maxWinning,
             capPerAddress
         ); // estimate gas: 4*23000 -> 5*23000
+
+        // transfer token to this contract 
+        bool success = ERC20(tokenContractAddress).transferFrom(payable(msg.sender), address(this), totalReward);
+        require(success, "insufficient amount for reward");
         
         // emit creating auction event
         emit CreateAuctionEvent(matchId, creatorAddress, maxWinning, ticketPrice, ticketReward, tokenContractAddress);
@@ -157,7 +159,7 @@ contract Auction {
     function deposit(string memory matchId, uint amount) public payable validMatch(matchId) {
         
         // check opening state
-        require(matches[matchId].expiryBlock <= block.number, "match is not opened to deposit");
+        require(matches[matchId].expiryBlock >= block.number, "match is not opened to deposit");
         
         // to prevent overflow, should limit upper_bound for amount
         uint128 _amount = uint128(amount);
@@ -176,6 +178,10 @@ contract Auction {
         // prevent player from deposit large number of ticket
         require(nextCount <= matches[matchId].capPerAddress, "Number of ticket exceeds cap");
 
+        // transfer money
+        bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
+        require(success, "deposit failed");
+
         if (currentCount == 0) {
             require(playerList[matchId].length < MAX_PLAYER, "Player limit exceeds");
 
@@ -187,9 +193,6 @@ contract Auction {
             // just increase ticket count
             playerData[matchId][playerAddress].ticketCount = nextCount;
         }
-
-        bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
-        require(success, "deposit failed");
         
         // emit deposit event
         emit DepositEvent(matchId, playerAddress, _amount, ticketCount);
@@ -246,10 +249,10 @@ contract Auction {
         // rehash and save randomSeed for next random 
         currentRandomSeed[matchId] = keccak256(abi.encodePacked(randomSeed));
         // emit event
-    	emit PublishedEvent(matchId, winnerAddress);
+    	emit PublishEvent(matchId, winnerAddress);
     }
 
-    function publish_lottery_result(string memory matchId, uint32 count) public validMatch(matchId) canPublishResult(matchId, count) { 
+    function publish_lottery_result_batch(string memory matchId, uint32 count) public validMatch(matchId) canPublishResult(matchId, count) { 
         // read 3 uint from storage
         uint    futureBlock      = matches[matchId].futureBlock;
         address creatorAddress   = matches[matchId].creatorAddress;
@@ -264,12 +267,9 @@ contract Auction {
         address[] memory winners = new address[](count);
         uint index;
 
-        for(index = 0; index < count; ++index) {
+        for(index = 0; (index < count) && (playerListLength > 0); ++index) {
             uint nextWinner = uint(randomSeed) % playerListLength;
             (address winnerAddress, uint tmpLen) = process_winner(matchId, nextWinner, creatorAddress, playerListLength);
-            if (tmpLen == 0) {
-                break;
-            }
             playerListLength = tmpLen;
             // store result
             winners[index]   = winnerAddress;
@@ -281,7 +281,7 @@ contract Auction {
         currentRandomSeed[matchId] = randomSeed;
 
         // emit event
-        emit BatchPublishedEvent(matchId, winners, index + 1);
+        emit BatchPublishEvent(matchId, winners, index);
     }
 
     // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
@@ -365,5 +365,9 @@ contract Auction {
 
     function get_player_count(string memory matchId) public view returns(uint) {
         return playerList[matchId].length;
+    }
+
+    function get_current_randomseed(string memory matchId) public view returns(uint) {
+        return uint(currentRandomSeed[matchId]);
     }
 }
