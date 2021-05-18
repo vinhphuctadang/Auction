@@ -229,7 +229,8 @@ contract Auction {
     }
     
 
-    function get_randomseed(string memory matchId, uint futureBlock) private returns(bytes32){
+    function get_randomseed(string memory matchId, uint futureBlock) private view returns(bytes32){
+        // dont need to store, caller to this function will store seed to eliminate gas used
         bytes32 randomSeed = currentRandomSeed[matchId];
         if (randomSeed == 0) {
             randomSeed = keccak256(abi.encodePacked(blockhash(futureBlock - 1)));
