@@ -65,9 +65,6 @@ contract Auction {
     // player list for each match
     mapping(string => address[]) playerList;
 
-    // address
-    address admin;
-
     modifier creatorOnly(string memory matchId) {
         address creatorAddress = matches[matchId].creatorAddress;
         require(creatorAddress != ADDRESS_NULL && creatorAddress == msg.sender, "only creator allowed");
@@ -111,11 +108,8 @@ contract Auction {
     event BatchPublishEvent(string matchId, address[] winners, uint count);
 
     constructor(address usdcContractAddress) { 
-        // wrong address will results in deposit failure 
-        USDC_ADDRESS = usdcContractAddress; 
-
-        // admin of contract
-        admin = msg.sender;
+        // wrong address will result in deposit failure 
+        USDC_ADDRESS = usdcContractAddress;
     }
     
     // functions
