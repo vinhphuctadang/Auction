@@ -82,7 +82,7 @@ Scenario:
     + a valid, unoccupied match id
     + valid amount of reward token in reward token contract (says, BAM)
     + positive number of max winning ticket
-    + an expirydate
+    + an expiry block, when this block is mined, player are not allowed to deposit
     + a future block that will be the future randseed (be careful when chosing this)
 
   Creators can also withdraw usdc by calling to creator_withdraw_profit(), only when a winning lottery revealed.
