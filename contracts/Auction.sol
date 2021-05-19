@@ -285,7 +285,7 @@ contract Auction {
     // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
     function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
         Match memory amatch = matches[matchId];
-        require(amatch.maxWinning > amatch.winningCount, "no more unused wining ticket");
+        require(amatch.maxWinning > amatch.winningCount, "no more unused winning ticket");
         uint remainingTicket = amatch.maxWinning - amatch.winningCount;
         matches[matchId].maxWinning = amatch.winningCount;
         
