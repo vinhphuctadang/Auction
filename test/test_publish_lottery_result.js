@@ -546,9 +546,9 @@ contract("Test publish lottery result for batch publishing", accounts =>{
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "publishCount must be at least 1 and not exceeds 16");
+            return assert.strictEqual(err.reason, "publishCount is out of range");
         }
-        throw `It should throw errors "publishCount must be at least 1 and not exceeds 16" but actually it does not`
+        throw `It should throw errors "publishCount is out of range" but actually it does not`
     })
 
     it("should not let call to publish result 0 time", async()=>{        
@@ -558,9 +558,9 @@ contract("Test publish lottery result for batch publishing", accounts =>{
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "publishCount must be at least 1 and not exceeds 16");
+            return assert.strictEqual(err.reason, "publishCount is out of range");
         }
-        throw `It should throw errors "publishCount must be at least 1 and not exceeds 16" but actually it does not`
+        throw `It should throw errors "publishCount publishCount is out of range" but actually it does not`
     })
 
     it("should say max wining reached when call to publish result 11 time(s) because max wining is 10", async()=>{        

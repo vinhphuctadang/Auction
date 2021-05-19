@@ -299,7 +299,7 @@ contract Auction {
         require(success, "withdraw not success");
     }
     
-    function creator_withdraw_profit() public payable { // creator withdraw his balance
+    function creator_withdraw_profit() public { // creator withdraw his balance
         uint balance = creatorBalance[msg.sender];
         require(balance > 0, "creator balance must be greater than 0");
         creatorBalance[msg.sender] = 0;

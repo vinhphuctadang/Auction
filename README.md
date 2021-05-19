@@ -101,69 +101,55 @@ In brief:
 
 ```
 function auction(
-        string memory matchId, uint64 expiryDate, uint128 futureBlock, 
+        string memory matchId, uint96 expiryBlock, uint96 futureBlock, 
         uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, 
-        address tokenContractAddress
+        address tokenContractAddress, uint capPerAddress
 ) public payables
 ```
 
+Create an auction, msg.sender will be address holds token in tokenContractAddress and is valid address on usdcContract as well to create and withdraw after the auction finished
+
+- ``matchId``: a valid string chosen by the creator and shoud be unique in the contract scope.
+- ``capPerAddress``: maximum number of ticket that a player in this auction can deposit for. 0 for infinity (2^128 max)
+
+--- 
 
 ```
 function deposit(string memory matchId, uint amount) public payable validMatch(matchId)
 ```
 
-    function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
-        Match memory amatch = matches[matchId];
-        require(amatch.maxWinning > amatch.winningCount, "no more unused wining ticket");
-        uint remainingTicket = amatch.maxWinning - amatch.winningCount;
-        matches[matchId].maxWinning = amatch.winningCount;
-        
-        bool success = ERC20(amatch.tokenContractAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
-        require(success, "withdraw not success");
-    }
-    
-    function creator_withdraw_profit() public payable { // creator withdraw his balance
-        uint balance = creatorBalance[msg.sender];
-        require(balance > 0, "creator balance must be greater than 0");
-        creatorBalance[msg.sender] = 0;
-        // send token
-        bool success = ERC20(USDC_ADDRESS).transfer(msg.sender, balance);
-        require(success, "withdraw not success"); // if failed then reverted to initial state
-    }
-    
-    function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
-        
-        address playerAddress = msg.sender;
-        // update wining tickets in storage
-        Player storage player = playerData[matchId][playerAddress];
+Players call deposit for buying tickets, currentTicketCount + amount must not exceeds capPerAddress specified by the auction creator, number of players not exceed 2^32-1
 
-        // load winning count
-        uint128 winningCount = player.winningCount;
-        require(winningCount > 0, "must have winning ticket to withdraw");
- 
-        player.ticketCount -= winningCount;
-        player.winningCount = 0;
+**Note**
+Players must have account in usdcContract and approve a valid amount to the auctionContract before depositing.
+
+---
+
+```
+function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId)
+```
+
+Creator call to this function to withdraw all his unused Reward when the match has ended.
+
+
+```
+function creator_withdraw_profit() public payable { // creator withdraw his balance
+```
+Creator withdraws the profit he earn from publish_lottery_result, where he is paied with usdc for each publish call
+
+
+```
+function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId)
+```
+
+Player withdraw rewarded token, note that there will be newTokenRecipient
+
+```
+function player_withdraw_deposit(string memory matchId) public matchFinished(matchId)
+```
+
+Players use this function to withdraw losing tickets when matches finished 
         
-        // send token
-        bool success = ERC20(matches[matchId].tokenContractAddress).transfer(newTokenRecipient, winningCount * matches[matchId].ticketReward);
-        require(success, "withdraw new token not success"); // if failed then reverted to initial state
-    }
-    
-    function player_withdraw_deposit(string memory matchId) public matchFinished(matchId) {
-        
-        address playerAddress = msg.sender;
-        Player memory player = playerData[matchId][playerAddress];
-        
-        // remaining ticket
-        uint128 remainTicket = player.ticketCount - player.winningCount;
-        require(remainTicket > 0, "there must be losing ticket to withdraw");
-        // update number of remaning
-        playerData[matchId][playerAddress].ticketCount = player.winningCount;
-        
-        // transfer usdc
-        bool success = ERC20(USDC_ADDRESS).transfer(playerAddress, remainTicket * matches[matchId].ticketPrice);
-        require(success, "withdraw deposit not success");
-    }
 ## Acknowledgement:
 
 This repository uses contracts (ERC20) and derives safemMath library from https://openzeppelin.com/contracts/

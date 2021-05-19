@@ -6,14 +6,6 @@ const USDC_TOKEN = artifacts.require("USDC_TOKEN")
 const BAM_TOKEN = artifacts.require("BAM_TOKEN")
 const Helper = artifacts.require("Helper")
 
-async function sleep(ms){
-	return new Promise((resolve,reject)=>{
-		setTimeout(()=>{
-			resolve()
-		}, ms)
-	})
-}
-
 contract("Test withdraw reward token", accounts => {
     let Tony = accounts[0], 
         Thor = accounts[1], 
