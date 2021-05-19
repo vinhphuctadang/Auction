@@ -89,8 +89,8 @@ contract Auction {
     }
 
     // events
-    event CreateAuctionEvent(string matchId, address auctionCreator, uint maxWinning, uint ticketPrice, uint ticketReward, address tokenContractAddress);
-    event DepositEvent(string matchId, address player, uint depositAmount, uint ticketCount);
+    event CreateAuctionEvent(string matchId, address auctionCreator, uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, address tokenContractAddress);
+    event DepositEvent(string matchId, address player, uint depositAmount, uint128 ticketCount);
     event PublishEvent(string matchId, address winner);
     event BatchPublishEvent(string matchId, address[] winners, uint count);
 
@@ -180,7 +180,7 @@ contract Auction {
         }
         
         // emit deposit event
-        emit DepositEvent(matchId, playerAddress, amount, ticketCount);
+        emit DepositEvent(matchId, playerAddress, amount, uint128(ticketCount));
     }
 
     // increase wining ticket of chosen user
