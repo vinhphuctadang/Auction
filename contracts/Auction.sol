@@ -152,7 +152,7 @@ contract Auction {
         require(amount > 0, "deposit amount must be greater than 0");
         
         address playerAddress = msg.sender;
-        uint96  ticketPrice   = matches[matchId].ticketPrice; //800 gas
+        uint    ticketPrice   = matches[matchId].ticketPrice; 
         // check if sender amount is divisble by ticketPrice
         require(amount % ticketPrice == 0, "deposit amount should be divisible by ticket price");
         
