@@ -11,8 +11,8 @@ contract Auction {
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
 
-    uint constant MAX_UINT128          = 0xffffffffffffffffffffffffffffffff;
-    uint constant MAX_PLAYER           = 0xffffffff;
+    uint constant MAX_UINT128          = type(uint128).max;
+    uint constant MAX_PLAYER           = type(uint32).max;
     uint constant MAX_PUBLISH_PER_CALL = 16; 
     
     // usdc address (erc20)
