@@ -55,15 +55,15 @@ contract Auction {
     }
     
     // state datas
-    mapping(string => bytes32) currentRandomSeed;
+    mapping(string => bytes32) private currentRandomSeed;
     // creator balance in usdc, address -> amount of money
-    mapping(address => uint) creatorBalance;
+    mapping(address => uint)   private creatorBalance;
     // match id -> Match
-    mapping(string => Match) matches;
+    mapping(string => Match)   public matches;
     // player data for each match, use mapping for quick access 
-    mapping(string => mapping(address => Player)) playerData;
+    mapping(string => mapping(address => Player)) public playerData;
     // player list for each match
-    mapping(string => address[]) playerList;
+    mapping(string => address[]) private playerList;
 
     modifier creatorOnly(string memory matchId) {
         address creatorAddress = matches[matchId].creatorAddress;
@@ -154,7 +154,7 @@ contract Auction {
         emit CreateAuctionEvent(matchId, creatorAddress, maxWinning, ticketPrice, ticketReward, tokenContractAddress);
     }
 
-    function deposit(string memory matchId, uint amount) public payable validMatch(matchId) {
+    function deposit(string memory matchId, uint amount) external payable validMatch(matchId) {
         
         // check opening state
         require(matches[matchId].expiryBlock >= block.number, "match is not opened to deposit");
@@ -234,7 +234,7 @@ contract Auction {
 
     // // call this function to publish lottery result
     // if not enough winining ticket published, no one can withdraw money => people are incentivize to invoke this function
-    function publish_lottery_result(string memory matchId) public validMatch(matchId) canPublishResult(matchId, 1) { 
+    function publish_lottery_result(string memory matchId) external validMatch(matchId) canPublishResult(matchId, 1) { 
         // 6 storage change at most
 
         // read 4 uint from storage
@@ -253,7 +253,7 @@ contract Auction {
     	emit PublishEvent(matchId, winnerAddress);
     }
 
-    function publish_lottery_result_batch(string memory matchId, uint32 count) public validMatch(matchId) canPublishResult(matchId, count) { 
+    function publish_lottery_result_batch(string memory matchId, uint count) external validMatch(matchId) canPublishResult(matchId, count) { 
         // read 4 uint from storage
         address creatorAddress   = matches[matchId].creatorAddress;
         uint    playerListLength = playerList[matchId].length;
@@ -283,7 +283,7 @@ contract Auction {
     }
 
     // used when number of ticket < number ticket deposited, we may rules out that if no ticket bought, we withdraw
-    function creator_withdraw_deposit(string memory matchId) public creatorOnly(matchId) matchFinished(matchId) {
+    function creator_withdraw_deposit(string memory matchId) external creatorOnly(matchId) matchFinished(matchId) {
         Match memory amatch = matches[matchId];
         require(amatch.maxWinning > amatch.winningCount, "no more unused wining ticket");
         uint remainingTicket = amatch.maxWinning - amatch.winningCount;
@@ -293,7 +293,7 @@ contract Auction {
         require(success, "withdraw not success");
     }
     
-    function creator_withdraw_profit() public { // creator withdraw his balance
+    function creator_withdraw_profit() external { // creator withdraw his balance
         uint balance = creatorBalance[msg.sender];
         require(balance > 0, "creator balance must be greater than 0");
         creatorBalance[msg.sender] = 0;
@@ -302,7 +302,7 @@ contract Auction {
         require(success, "withdraw not success"); // if failed then reverted to initial state
     }
     
-    function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) public matchFinished(matchId) {
+    function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) external matchFinished(matchId) {
         
         address playerAddress = msg.sender;
         // update wining tickets in storage
@@ -320,7 +320,7 @@ contract Auction {
         require(success, "withdraw new token not success"); // if failed then reverted to initial state
     }
     
-    function player_withdraw_deposit(string memory matchId) public matchFinished(matchId) {
+    function player_withdraw_deposit(string memory matchId) external matchFinished(matchId) {
         
         address playerAddress = msg.sender;
         Player memory player = playerData[matchId][playerAddress];
