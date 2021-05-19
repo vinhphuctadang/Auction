@@ -1,25 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-
-/**
- * @title SafeMath
- * @dev Math operations with safety checks that throw on error
- * customized openzeppelin-solidity safemath 
- */
-library SafeMath {
-  function add(uint128 a, uint128 b) internal pure returns (uint128 c) {
-    c = a + b;
-    require (c >= a, "sum c must be larger or equals to a");
-    return c;
-  }
-}
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Auction {
-    
-    // use library
-    using SafeMath for uint128;
+
+    using SafeERC20 for IERC20;
 
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
@@ -147,8 +134,7 @@ contract Auction {
         ); // estimate gas: 4*23000 -> 5*23000
 
         // transfer token to this contract 
-        bool success = ERC20(tokenContractAddress).transferFrom(payable(msg.sender), address(this), totalReward);
-        require(success, "insufficient amount for reward");
+        IERC20(tokenContractAddress).safeTransferFrom(payable(msg.sender), address(this), totalReward);
         
         // emit creating auction event
         emit CreateAuctionEvent(matchId, creatorAddress, maxWinning, ticketPrice, ticketReward, tokenContractAddress);
@@ -171,14 +157,13 @@ contract Auction {
         uint128 ticketCount = _amount / ticketPrice;
 
         uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
-        uint128 nextCount = currentCount.add(ticketCount);
+        uint128 nextCount = currentCount + ticketCount;
 
         // prevent player from deposit large number of ticket
         require(nextCount <= matches[matchId].capPerAddress, "Number of ticket exceeds cap");
 
         // transfer money
-        bool success = ERC20(USDC_ADDRESS).transferFrom(payable(playerAddress), address(this), _amount);
-        require(success, "deposit failed");
+        IERC20(USDC_ADDRESS).safeTransferFrom(payable(playerAddress), address(this), _amount);
 
         if (currentCount == 0) {
             require(playerList[matchId].length < MAX_PLAYER, "Player limit exceeds");
@@ -289,8 +274,7 @@ contract Auction {
         uint remainingTicket = amatch.maxWinning - amatch.winningCount;
         matches[matchId].maxWinning = amatch.winningCount;
         
-        bool success = ERC20(amatch.tokenContractAddress).transfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
-        require(success, "withdraw not success");
+        IERC20(amatch.tokenContractAddress).safeTransfer(amatch.creatorAddress, remainingTicket * amatch.ticketReward);
     }
     
     function creator_withdraw_profit() external { // creator withdraw his balance
@@ -298,8 +282,8 @@ contract Auction {
         require(balance > 0, "creator balance must be greater than 0");
         creatorBalance[msg.sender] = 0;
         // send token
-        bool success = ERC20(USDC_ADDRESS).transfer(msg.sender, balance);
-        require(success, "withdraw not success"); // if failed then reverted to initial state
+        IERC20(USDC_ADDRESS).safeTransfer(msg.sender, balance);
+        // require(success, "withdraw not success"); // if failed then reverted to initial state
     }
     
     function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) external matchFinished(matchId) {
@@ -316,8 +300,8 @@ contract Auction {
         player.winningCount = 0;
         
         // send token
-        bool success = ERC20(matches[matchId].tokenContractAddress).transfer(newTokenRecipient, winningCount * matches[matchId].ticketReward);
-        require(success, "withdraw new token not success"); // if failed then reverted to initial state
+        IERC20(matches[matchId].tokenContractAddress).safeTransfer(newTokenRecipient, winningCount * matches[matchId].ticketReward);
+        // require(success, "withdraw new token not success"); // if failed then reverted to initial state
     }
     
     function player_withdraw_deposit(string memory matchId) external matchFinished(matchId) {
@@ -332,8 +316,7 @@ contract Auction {
         playerData[matchId][playerAddress].ticketCount = player.winningCount;
         
         // transfer usdc
-        bool success = ERC20(USDC_ADDRESS).transfer(playerAddress, remainTicket * matches[matchId].ticketPrice);
-        require(success, "withdraw deposit not success");
+        IERC20(USDC_ADDRESS).safeTransfer(playerAddress, remainTicket * matches[matchId].ticketPrice);
     }
 
     // getters 
