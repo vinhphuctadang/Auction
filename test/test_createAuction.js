@@ -178,7 +178,7 @@ contract("Test (create) auction", accounts => {
             (blockCount + 10).toString(),
             '0',
             '10',
-            '115792089237316195423570985008687907853269984665640564039457584007913129639935' // max uint 128, use python to compute this value LOL
+            '340282366920938463463374607431768211455' // max uint 128, use python to compute this value LOL
         ]
 
         // deep equals just produces weird error on types

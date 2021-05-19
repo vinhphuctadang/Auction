@@ -11,7 +11,7 @@ contract Auction {
     // constants
     address constant ADDRESS_NULL = 0x0000000000000000000000000000000000000000;
 
-    uint constant MAX_UINT             = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint constant MAX_UINT128          = 0xffffffffffffffffffffffffffffffff;
     uint constant MAX_PLAYER           = 0xffffffff;
     uint constant MAX_PUBLISH_PER_CALL = 16; 
     
@@ -89,8 +89,8 @@ contract Auction {
     }
 
     // events
-    event CreateAuctionEvent(string matchId, address auctionCreator, uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, address tokenContractAddress);
-    event DepositEvent(string matchId, address player, uint128 depositAmount, uint128 ticketCount);
+    event CreateAuctionEvent(string matchId, address auctionCreator, uint maxWinning, uint ticketPrice, uint ticketReward, address tokenContractAddress);
+    event DepositEvent(string matchId, address player, uint depositAmount, uint ticketCount);
     event PublishEvent(string matchId, address winner);
     event BatchPublishEvent(string matchId, address[] winners, uint count);
 
@@ -116,12 +116,14 @@ contract Auction {
         // check rewardPerTicket
         require(ticketReward > 0 && ticketPrice > 0, "ticket price and reward must be greater than 0");
         // check amount == rewardPerTicket * maxWinningTicket
-        require(maxWinning > 0 , "maxWinningTicket must be greater than 0");
-        
-        if (capPerAddress == 0) { capPerAddress = MAX_UINT; }
+        require(maxWinning > 0, "maxWinningTicket must be greater than 0");
+        // check number limit exceed
+        require(capPerAddress <= MAX_UINT128, "cap per address should not larget than 2^128");
 
-        uint128 totalReward = maxWinning * ticketReward;
-        
+        if (capPerAddress == 0) { 
+            capPerAddress = MAX_UINT128; 
+        }
+
         // store match
         matches[matchId] = Match(
             creatorAddress, 
@@ -133,6 +135,7 @@ contract Auction {
             capPerAddress
         ); // estimate gas: 4*23000 -> 5*23000
 
+        uint totalReward = maxWinning * ticketReward;
         // transfer token to this contract 
         IERC20(tokenContractAddress).safeTransferFrom(payable(msg.sender), address(this), totalReward);
         
@@ -146,39 +149,38 @@ contract Auction {
         require(matches[matchId].expiryBlock >= block.number, "match is not opened to deposit");
         
         // to prevent overflow, should limit upper_bound for amount
-        uint128 _amount = uint128(amount);
-        require(_amount > 0, "deposit amount must be greater than 0");
+        require(amount > 0, "deposit amount must be greater than 0");
         
         address playerAddress = msg.sender;
         uint96  ticketPrice   = matches[matchId].ticketPrice; //800 gas
         // check if sender amount is divisble by ticketPrice
-        require(_amount % ticketPrice == 0, "deposit amount should be divisible by ticket price");
+        require(amount % ticketPrice == 0, "deposit amount should be divisible by ticket price");
         
-        uint128 ticketCount = _amount / ticketPrice;
+        uint ticketCount  = amount / ticketPrice;
 
-        uint128 currentCount = playerData[matchId][playerAddress].ticketCount;
-        uint128 nextCount = currentCount + ticketCount;
+        uint currentCount = playerData[matchId][playerAddress].ticketCount;
+        uint nextCount    = currentCount + ticketCount;
 
-        // prevent player from deposit large number of ticket
+        // prevent player from deposit large number of ticket, capPerAddress < 2^128
         require(nextCount <= matches[matchId].capPerAddress, "Number of ticket exceeds cap");
 
         // transfer money
-        IERC20(USDC_ADDRESS).safeTransferFrom(payable(playerAddress), address(this), _amount);
+        IERC20(USDC_ADDRESS).safeTransferFrom(payable(playerAddress), address(this), amount);
 
         if (currentCount == 0) {
             require(playerList[matchId].length < MAX_PLAYER, "Player limit exceeds");
 
             // create new slot for new player 
-            playerData[matchId][playerAddress] = Player(nextCount, 0);
+            playerData[matchId][playerAddress] = Player(uint128(nextCount), 0);
             playerList[matchId].push(playerAddress);
         }
         else {
             // just increase ticket count
-            playerData[matchId][playerAddress].ticketCount = nextCount;
+            playerData[matchId][playerAddress].ticketCount = uint128(nextCount);
         }
         
         // emit deposit event
-        emit DepositEvent(matchId, playerAddress, _amount, ticketCount);
+        emit DepositEvent(matchId, playerAddress, amount, ticketCount);
     }
 
     // increase wining ticket of chosen user
