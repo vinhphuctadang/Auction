@@ -131,6 +131,23 @@ function creator_withdraw_deposit(string memory matchId) public creatorOnly(matc
 
 Creator call to this function to withdraw all his unused Reward when the match has ended.
 
+---
+
+```
+function publish_lottery_result(string memory matchId)
+```
+
+call this function to reveal 1 winner of match ``matchId``
+
+---
+
+```
+function publish_lottery_result_batch(string memory matchId, int count)
+```
+
+call this function to reveal ``count`` winners of match ``matchId`` (count should be >= 1 and <= MAX_PUBLISH_PER_CALL)
+
+---
 
 ```
 function creator_withdraw_profit() public payable { // creator withdraw his balance
