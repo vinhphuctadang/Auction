@@ -118,7 +118,7 @@ contract Auction {
         // check amount == rewardPerTicket * maxWinningTicket
         require(maxWinning > 0, "maxWinningTicket must be greater than 0");
         // check number limit exceed
-        require(capPerAddress <= MAX_UINT128, "cap per address should not larget than 2^128");
+        require(capPerAddress <= MAX_UINT128, "cap per address should not be larger than 2^128");
 
         if (capPerAddress == 0) { 
             capPerAddress = MAX_UINT128; 
