@@ -103,7 +103,7 @@ contract("Test (create) auction", accounts => {
         throw `It should throw "future block > expiryBlock > current chain length" but actually it does not`
     })
 
-    it("should not let create when maxWining == 0", async()=>{
+    it("should not let create when maxwinning == 0", async()=>{
         let tx, blockCount = parseInt(await helperContract.get_block_count({from: Tony}))
         try {
             tx = await auctionContract.auction("tonyMatch", blockCount + 5, blockCount + 10, 0, 2, 10, bamContract.address, 0, {from : Tony});

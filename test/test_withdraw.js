@@ -106,7 +106,7 @@ contract("Test withdraw reward token", accounts => {
         }
         catch(err) {
             logger.debug(err.toString())
-            return assert.strictEqual(err.reason, "invalid match or match is not closed yet");
+            return assert.strictEqual(err.reason, "invalid match or future block is not generated yet");
         }
     })
 
@@ -335,9 +335,9 @@ contract("Test creator with draw deposit token", accounts =>{
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "invalid match or match is not closed yet");
+            return assert.strictEqual(err.reason, "invalid match or future block is not generated yet");
         }
-        throw `It should throw error "invalid match or match is not closed yet" but actually it does not`
+        throw `It should throw error "invalid match or future block is not generated yet" but actually it does not`
     })
 
     it("should not let creator withdraw deposit BAM when match is not finished", async()=>{
@@ -429,8 +429,8 @@ contract("Test creator with draw deposit token", accounts =>{
         // get and see winning tickets == max ticket
         let amatch = await auctionContract.get_match("thorMatch")
         let winningCount = amatch['6'].toString()
-        let maxWining    = amatch['7'].toString()
-        assert.strictEqual(winningCount == maxWining, true, `WinningCount and maxWining are not equals: winningCount:${winningCount}, maxWining: ${maxWining}`);
+        let maxwinning    = amatch['7'].toString()
+        assert.strictEqual(winningCount == maxwinning, true, `WinningCount and maxwinning are not equals: winningCount:${winningCount}, maxwinning: ${maxwinning}`);
     })
 
     it("should not let creator call withdraw BAM again", async()=>{
@@ -439,9 +439,9 @@ contract("Test creator with draw deposit token", accounts =>{
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "no more unused wining ticket");
+            return assert.strictEqual(err.reason, "no more unused winning ticket");
         }
-        throw `It should throw error "no more unused wining ticket" but actually it does not`
+        throw `It should throw error "no more unused winning ticket" but actually it does not`
     })
 })
 
@@ -545,7 +545,7 @@ contract("Test withdrawal after 256 blocks having no call to publish_result", ac
             logger.error(err.toString())
             return assert.strictEqual(err.reason, "match is finished");
         }
-        throw `It should throw errors "max wining reached" but actually it does not`
+        throw `It should throw errors "max winning reached" but actually it does not`
     })
 
     it("should let creator withdraw 100 BAM token", async()=>{
@@ -559,8 +559,8 @@ contract("Test withdrawal after 256 blocks having no call to publish_result", ac
         // get and see winning tickets == max ticket
         let amatch = await auctionContract.get_match("thorMatch")
         let winningCount = amatch['6'].toString()
-        let maxWining    = amatch['7'].toString()
-        assert.strictEqual(winningCount == maxWining, true, `WinningCount and maxWining are not equals: winningCount:${winningCount}, maxWining: ${maxWining}`);
+        let maxwinning    = amatch['7'].toString()
+        assert.strictEqual(winningCount == maxwinning, true, `WinningCount and maxwinning are not equals: winningCount:${winningCount}, maxwinning: ${maxwinning}`);
     })
 
     it("should allow player to withdraw usdc and verify balances of all players", async()=>{

@@ -7,7 +7,7 @@ Use this token for testing the smart contract
 Use this token as a stable currency to deposit for tickets in Auction contract
 */
 
-pragma solidity >=0.4.22 <0.9.0;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 

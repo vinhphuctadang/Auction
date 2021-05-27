@@ -54,7 +54,7 @@ contract Auction {
 
     modifier creatorOnly(string memory matchId) {
         address creatorAddress = matches[matchId].creatorAddress;
-        require(creatorAddress != ADDRESS_NULL && creatorAddress == msg.sender, "only creator allowed");
+        require(creatorAddress == msg.sender, "only creator allowed");
         _;
     }
 
@@ -65,7 +65,7 @@ contract Auction {
     
     modifier matchFinished(string memory matchId){
         Match memory amatch = matches[matchId];
-        require(amatch.creatorAddress != ADDRESS_NULL && amatch.futureBlock < block.number, "invalid match or match is not closed yet");
+        require(amatch.creatorAddress != ADDRESS_NULL && amatch.futureBlock < block.number, "invalid match or future block is not generated yet");
 
         bool randomSeedNotSet = currentRandomSeed[matchId] == 0 && (block.number - amatch.futureBlock > 255);
         // if no more candidate player in list or winningCount reached
@@ -81,8 +81,8 @@ contract Auction {
         require(amatch.futureBlock <= block.number, "future block has not been generated");
         // cannot publish any more
         require(currentRandomSeed[matchId] > 0 || block.number - amatch.futureBlock <= 255, "match is finished");
-        // check if max wining reached
-        require(publishCount <=  amatch.maxWinning && amatch.winningCount <= amatch.maxWinning - publishCount, "max wining reached");
+        // check if max winning reached
+        require(publishCount <=  amatch.maxWinning && amatch.winningCount <= amatch.maxWinning - publishCount, "max winning reached");
         // get random between 0 and randomUpperbound
         require(playerList[matchId].length > 0, "player list length should be greater than 0");
         _;
@@ -104,7 +104,7 @@ contract Auction {
         string memory matchId, uint96 expiryBlock, uint96 futureBlock, 
         uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, 
         address tokenContractAddress, uint capPerAddress
-    ) public payable {
+    ) public {
         // use SafeMath (not safeMoon T,T)
         address creatorAddress = msg.sender;
         
@@ -143,7 +143,7 @@ contract Auction {
         emit CreateAuctionEvent(matchId, creatorAddress, maxWinning, ticketPrice, ticketReward, tokenContractAddress);
     }
 
-    function deposit(string memory matchId, uint amount) external payable validMatch(matchId) {
+    function deposit(string memory matchId, uint amount) external validMatch(matchId) {
         
         // check opening state
         require(matches[matchId].expiryBlock >= block.number, "match is not opened to deposit");
@@ -183,7 +183,7 @@ contract Auction {
         emit DepositEvent(matchId, playerAddress, amount, uint128(ticketCount));
     }
 
-    // increase wining ticket of chosen user
+    // increase winning ticket of chosen user
     // should be called from publish_lottery_result with modifier, all input should be valid before calling this function
     function process_winner(string memory matchId, uint nextWinner, address creatorAddress, uint playerListLength) private returns(address, uint){
         address winnerAddress = playerList[matchId][nextWinner];
@@ -291,7 +291,7 @@ contract Auction {
     function player_withdraw_reward(string memory matchId, address payable newTokenRecipient) external matchFinished(matchId) {
         
         address playerAddress = msg.sender;
-        // update wining tickets in storage
+        // update winning tickets in storage
         Player storage player = playerData[matchId][playerAddress];
 
         // load winning count
@@ -322,12 +322,12 @@ contract Auction {
     }
 
     // getters 
-    function get_player(string memory matchId, address playerAddress) public validMatch(matchId) view returns(uint128, uint128) {
+    function get_player(string memory matchId, address playerAddress) external validMatch(matchId) view returns(uint128, uint128) {
         Player memory player = playerData[matchId][playerAddress];
         return (player.ticketCount, player.winningCount);
     }
 
-    function get_match(string memory matchId) public validMatch(matchId) view returns (address, uint96, address, uint96, uint96, uint96, uint32, uint32, uint) {
+    function get_match(string memory matchId) external validMatch(matchId) view returns (address, uint96, address, uint96, uint96, uint96, uint32, uint32, uint) {
         Match memory amatch = matches[matchId];
         return (
             amatch.creatorAddress,
@@ -342,15 +342,15 @@ contract Auction {
         );
     }
 
-    function get_creator_balance(address creatorAddress) public view returns(uint){
+    function get_creator_balance(address creatorAddress) external view returns(uint){
         return creatorBalance[creatorAddress];
     }
 
-    function get_player_count(string memory matchId) public view returns(uint) {
+    function get_player_count(string memory matchId) external view returns(uint) {
         return playerList[matchId].length;
     }
 
-    function get_current_randomseed(string memory matchId) public view returns(uint) {
+    function get_current_randomseed(string memory matchId) external view returns(uint) {
         return uint(currentRandomSeed[matchId]);
     }
 }

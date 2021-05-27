@@ -311,9 +311,9 @@ contract("Test publish lottery result on normal cases", accounts => {
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "max wining reached");
+            return assert.strictEqual(err.reason, "max winning reached");
         }
-        throw `It should throw errors "max wining reached" but actually it does not`
+        throw `It should throw errors "max winning reached" but actually it does not`
     })
 })
 
@@ -563,16 +563,16 @@ contract("Test publish lottery result for batch publishing", accounts =>{
         throw `It should throw errors "publishCount publishCount is out of range" but actually it does not`
     })
 
-    it("should say max wining reached when call to publish result 11 time(s) because max wining is 10", async()=>{        
+    it("should say max winning reached when call to publish result 11 time(s) because max winning is 10", async()=>{        
         let tx
         try {
             tx = await auctionContract.publish_lottery_result_batch("thorMatch", 11, { from: Steve }); 
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "max wining reached");
+            return assert.strictEqual(err.reason, "max winning reached");
         }
-        throw `It should throw errors "max wining reached" but actually it does not`
+        throw `It should throw errors "max winning reached" but actually it does not`
     })
 
     it("should call publish result with count = 5 and check number of winning ticket of players are correct", async()=>{
@@ -606,16 +606,16 @@ contract("Test publish lottery result for batch publishing", accounts =>{
         assert.strictEqual(amatch['7'].toNumber(), 10);
     })
 
-    it("should say max wining reached when call to publish result 7 time(s) because max wining is 10, current is 5", async()=>{        
+    it("should say max winning reached when call to publish result 7 time(s) because max winning is 10, current is 5", async()=>{        
         let tx
         try {
             tx = await auctionContract.publish_lottery_result_batch("thorMatch", 7, { from: Steve }); 
         }
         catch(err) {
             logger.error(err.toString())
-            return assert.strictEqual(err.reason, "max wining reached");
+            return assert.strictEqual(err.reason, "max winning reached");
         }
-        throw `It should throw errors "max wining reached" but actually it does not`
+        throw `It should throw errors "max winning reached" but actually it does not`
     })
 
     it("should call publish result with count = 2 but found 1 valid address", async()=>{
