@@ -3,8 +3,9 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract Auction {
+contract Auction is ReentrancyGuard {
 
     using SafeERC20 for IERC20;
 
@@ -105,7 +106,7 @@ contract Auction {
         uint32 maxWinning, uint96 ticketPrice, uint96 ticketReward, 
         address tokenContractAddress, uint capPerAddress
     ) public {
-        // use SafeMath (not safeMoon T,T)
+        // use SafeMath 
         address creatorAddress = msg.sender;
         
         // check match validity:
@@ -143,7 +144,7 @@ contract Auction {
         emit CreateAuctionEvent(matchId, creatorAddress, maxWinning, ticketPrice, ticketReward, tokenContractAddress);
     }
 
-    function deposit(string memory matchId, uint amount) external validMatch(matchId) {
+    function deposit(string memory matchId, uint amount) external validMatch(matchId) nonReentrant {
         
         // check opening state
         require(matches[matchId].expiryBlock >= block.number, "match is not opened to deposit");
