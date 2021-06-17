@@ -19,7 +19,6 @@ contract Auction is ReentrancyGuard {
     // usdc address (erc20)
     address USDC_ADDRESS;
     
-    // uint dummyVariable;
     // player data
     struct Player { // 1 uint256
         // number of deposit;
