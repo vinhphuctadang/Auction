@@ -169,4 +169,4 @@ Players use this function to withdraw losing tickets when matches finished
         
 ## Acknowledgement:
 
-This repository uses contracts (ERC20) and derives safemMath library from https://openzeppelin.com/contracts/
+This repository uses contracts (ERC20) template from https://openzeppelin.com/contracts/
